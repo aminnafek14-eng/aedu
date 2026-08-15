@@ -117,15 +117,7 @@ export default function FolderPage() {
                         {l.img_url
                           ? <img src={l.img_url} alt={l.name} style={S.appIconImg} />
                           : <span style={S.appEmoji}>{l.content_type === 'html' ? '🎮' : '🔗'}</span>}
-                        {/* Badge untuk tunjuk jenis */}
-                        <div style={{
-                          position: 'absolute', bottom: 4, right: 4,
-                          background: l.content_type === 'html' ? 'rgba(99,102,241,0.9)' : 'rgba(0,0,0,0.5)',
-                          color: 'white', fontSize: 8, fontWeight: 800,
-                          padding: '1px 5px', borderRadius: 6
-                        }}>
-                          {l.content_type === 'html' ? 'HTML' : 'LINK'}
-                        </div>
+
                       </div>
                       <div style={S.appName}>{l.name}</div>
                     </div>
@@ -195,12 +187,12 @@ const S: Record<string, React.CSSProperties> = {
   headerTitle: { fontFamily: "'Plus Jakarta Sans',sans-serif", fontWeight: 800, fontSize: 17, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'white' },
   content: { padding: '16px 12px', flex: 1 },
   gridLabel: { fontSize: 12, fontWeight: 700, color: '#6366F1', marginBottom: 14, textTransform: 'uppercase', letterSpacing: '0.05em' },
-  appsGrid: { display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '20px 8px' },
+  appsGrid: { display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '20px 10px' },
   appItem: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, cursor: 'pointer', WebkitTapHighlightColor: 'transparent' },
-  appIcon: { width: 72, height: 72, borderRadius: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', transition: 'transform 0.15s', flexShrink: 0, position: 'relative' },
+  appIcon: { width: 96, height: 96, borderRadius: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', transition: 'transform 0.15s', flexShrink: 0, position: 'relative' },
   appIconImg: { width: '100%', height: '100%', objectFit: 'cover' },
-  appEmoji: { fontSize: 34, lineHeight: 1 },
-  appName: { fontSize: 11, fontWeight: 600, color: '#1E293B', textAlign: 'center', lineHeight: 1.3, wordBreak: 'break-word', maxWidth: 76 },
+  appEmoji: { fontSize: 44, lineHeight: 1 },
+  appName: { fontSize: 12, fontWeight: 700, color: '#1E293B', textAlign: 'center', lineHeight: 1.3, wordBreak: 'break-word', maxWidth: 100 },
   empty: { textAlign: 'center', padding: '60px 20px', color: '#64748B', fontSize: 14 },
   iframeOverlay: { position: 'fixed', inset: 0, zIndex: 200, display: 'flex', flexDirection: 'column', background: 'white' },
   iframeBar: { height: 50, background: 'linear-gradient(135deg,#4F46E5,#06B6D4)', display: 'flex', alignItems: 'center', padding: '0 12px', gap: 10, flexShrink: 0 },

@@ -135,6 +135,11 @@ export default function StudentHome() {
       )}
 
       {/* Folders — Apps-style grid */}
+      <style>{`
+        .folders-grid { grid-template-columns: repeat(2, 1fr); }
+        @media (min-width: 600px) { .folders-grid { grid-template-columns: repeat(3, 1fr); } }
+        @media (min-width: 900px) { .folders-grid { grid-template-columns: repeat(4, 1fr); } }
+      `}</style>
       <div style={S.section}>
         <div style={S.sectionLabel}>✨ Pilih Aktiviti Pembelajaran</div>
         {folders.length === 0

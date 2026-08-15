@@ -98,6 +98,11 @@ export default function FolderPage() {
         <span style={S.headerTitle}>{folder?.name}</span>
       </div>
 
+      <style>{`
+        .apps-grid { grid-template-columns: repeat(2, 1fr) !important; }
+        @media (min-width: 600px) { .apps-grid { grid-template-columns: repeat(3, 1fr) !important; } }
+        @media (min-width: 900px) { .apps-grid { grid-template-columns: repeat(4, 1fr) !important; } }
+      `}</style>
       {/* Apps grid */}
       <div style={S.content}>
         {links.length === 0
@@ -108,7 +113,7 @@ export default function FolderPage() {
             </div>
           : <>
               <div style={S.gridLabel}>Ketik untuk mula! 👆</div>
-              <div style={S.appsGrid}>
+              <div style={S.appsGrid} className="apps-grid">
                 {links.map((l, li) => {
                   const color = LINK_COLORS[li % LINK_COLORS.length]
                   return (
@@ -187,9 +192,9 @@ const S: Record<string, React.CSSProperties> = {
   headerTitle: { fontFamily: "'Plus Jakarta Sans',sans-serif", fontWeight: 800, fontSize: 17, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'white' },
   content: { padding: '16px 12px', flex: 1 },
   gridLabel: { fontSize: 12, fontWeight: 700, color: '#6366F1', marginBottom: 14, textTransform: 'uppercase', letterSpacing: '0.05em' },
-  appsGrid: { display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: '16px 14px' },
+  appsGrid: { display: 'grid', gap: '14px 12px' },
   appItem: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, cursor: 'pointer', WebkitTapHighlightColor: 'transparent', width: '100%' },
-  appIcon: { width: '100%', height: 140, borderRadius: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', transition: 'transform 0.15s', flexShrink: 0, position: 'relative' },
+  appIcon: { width: '100%', aspectRatio: '1/1', borderRadius: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', transition: 'transform 0.15s', flexShrink: 0, position: 'relative' },
   appIconImg: { width: '100%', height: '100%', objectFit: 'cover', display: 'block' },
   appEmoji: { fontSize: 60, lineHeight: 1 },
   appName: { fontSize: 14, fontWeight: 700, color: '#1E293B', textAlign: 'center', lineHeight: 1.3, wordBreak: 'break-word', maxWidth: '100%' },

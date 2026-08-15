@@ -193,5 +193,5 @@ const S: Record<string, React.CSSProperties> = {
   appName: { fontSize: 11, fontWeight: 600, color: '#1E293B', textAlign: 'center', lineHeight: 1.3, wordBreak: 'break-word', maxWidth: 76 },
   empty: { textAlign: 'center', padding: '40px 20px', color: '#64748B', fontSize: 14 },
   adminLink: { textAlign: 'center', padding: '20px 0 16px', marginTop: 'auto' },
-  adminTiny: { fontSize: 11, color: '#94A3B8', textDecoration: 'none', padding: '5px 12px', border: '1px solid #E2E8F0', borderRadius: 20, background: 'white' },
+  adminTiny: { fontSize: 11, color: '#94A3B8', textDecoration: 'none', padding: '5px 12px', border: '1px solid #E2E8F0', borderRadius: 20, background: 'white' },  footer: { textAlign: 'center' as const, padding: '12px 16px 24px', marginTop: 8 },  footerText: { fontSize: 12, color: '#64748B', fontWeight: 500 },  footerSub: { fontSize: 10, color: '#CBD5E1', marginTop: 3 },
 }

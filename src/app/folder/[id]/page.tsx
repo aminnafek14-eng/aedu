@@ -1,8 +1,19 @@
 'use client'
-// Folder page — apps grid style + iframe viewer (murid kekal dalam apps)
 import { useEffect, useState, useRef } from 'react'
 import { useRouter, useParams } from 'next/navigation'
-import { supabase, type Link, type Folder } from '@/lib/supabase'
+import { supabase, type Folder } from '@/lib/supabase'
+
+type LinkItem = {
+  id: string
+  folder_id: string
+  name: string
+  url: string | null
+  html_content: string | null
+  content_type: 'url' | 'html'
+  img_url: string | null
+  emoji: string
+  order_num: number
+}
 
 const LINK_COLORS = [
   { bg: 'linear-gradient(135deg,#FF6B6B,#FF8E8E)', shadow: 'rgba(255,107,107,0.3)' },
@@ -23,16 +34,15 @@ export default function FolderPage() {
   const router = useRouter()
   const { id } = useParams<{ id: string }>()
   const [folder, setFolder] = useState<Folder | null>(null)
-  const [links, setLinks] = useState<Link[]>([])
+  const [links, setLinks] = useState<LinkItem[]>([])
   const [loading, setLoading] = useState(true)
-  // iframe viewer state
-  const [activeLink, setActiveLink] = useState<Link | null>(null)
+  const [activeLink, setActiveLink] = useState<LinkItem | null>(null)
+  const [iframeLoading, setIframeLoading] = useState(false)
   const iframeRef = useRef<HTMLIFrameElement>(null)
 
   useEffect(() => {
     const s = localStorage.getItem('aedu_student') || sessionStorage.getItem('aedu_student')
     if (!s) { router.replace('/login'); return }
-    // Pastikan simpan dalam localStorage
     if (s) localStorage.setItem('aedu_student', s)
     loadData()
   }, [id])
@@ -42,24 +52,36 @@ export default function FolderPage() {
       supabase.from('folders').select('*').eq('id', id).single(),
       supabase.from('links').select('*').eq('folder_id', id).order('order_num'),
     ])
-    setFolder(f); setLinks(l || [])
+    setFolder(f)
+    setLinks((l || []) as LinkItem[])
     setLoading(false)
   }
 
-  const openLink = (link: Link) => {
+  const openLink = (link: LinkItem) => {
+    setIframeLoading(true)
     setActiveLink(link)
   }
 
-  const closeLink = () => {
-    setActiveLink(null)
+  const closeLink = () => setActiveLink(null)
+
+  // Build iframe src for HTML content
+  const getIframeSrc = (link: LinkItem): string | undefined => {
+    if (link.content_type === 'html' && link.html_content) {
+      return undefined // use srcdoc instead
+    }
+    return link.url || undefined
+  }
+
+  const getIframeSrcdoc = (link: LinkItem): string | undefined => {
+    if (link.content_type === 'html' && link.html_content) {
+      return link.html_content
+    }
+    return undefined
   }
 
   if (loading) return (
     <div style={S.center}>
-      <div style={S.spinWrap}>
-        <div style={{ fontSize: 40 }}>⏳</div>
-        <div style={S.spinner} />
-      </div>
+      <div style={S.spinner} />
     </div>
   )
 
@@ -80,9 +102,9 @@ export default function FolderPage() {
       <div style={S.content}>
         {links.length === 0
           ? <div style={S.empty}>
-              <span style={{ fontSize: 48 }}>🔗</span>
+              <span style={{ fontSize: 48 }}>🎮</span>
               <p style={{ marginTop: 12, fontWeight: 600 }}>Tiada aktiviti lagi</p>
-              <p style={{ fontSize: 12, marginTop: 4 }}>Admin belum tambah pautan</p>
+              <p style={{ fontSize: 12, marginTop: 4, color: '#94A3B8' }}>Admin belum tambah aktiviti</p>
             </div>
           : <>
               <div style={S.gridLabel}>Ketik untuk mula! 👆</div>
@@ -94,7 +116,16 @@ export default function FolderPage() {
                       <div style={{ ...S.appIcon, background: color.bg, boxShadow: `0 6px 20px ${color.shadow}` }}>
                         {l.img_url
                           ? <img src={l.img_url} alt={l.name} style={S.appIconImg} />
-                          : <span style={S.appEmoji}>🎮</span>}
+                          : <span style={S.appEmoji}>{l.content_type === 'html' ? '🎮' : '🔗'}</span>}
+                        {/* Badge untuk tunjuk jenis */}
+                        <div style={{
+                          position: 'absolute', bottom: 4, right: 4,
+                          background: l.content_type === 'html' ? 'rgba(99,102,241,0.9)' : 'rgba(0,0,0,0.5)',
+                          color: 'white', fontSize: 8, fontWeight: 800,
+                          padding: '1px 5px', borderRadius: 6
+                        }}>
+                          {l.content_type === 'html' ? 'HTML' : 'LINK'}
+                        </div>
                       </div>
                       <div style={S.appName}>{l.name}</div>
                     </div>
@@ -104,23 +135,50 @@ export default function FolderPage() {
             </>}
       </div>
 
-      {/* ── IFRAME VIEWER ── */}
+      {/* VIEWER — iframe penuh skrin */}
       {activeLink && (
         <div style={S.iframeOverlay}>
-          {/* Mini topbar dalam viewer */}
+          {/* Topbar */}
           <div style={S.iframeBar}>
             <button style={S.iframeBack} onClick={closeLink}>✕ Tutup</button>
             <div style={S.iframeTitle}>{activeLink.name}</div>
-            <a href={activeLink.url} target="_blank" rel="noopener noreferrer" style={S.iframeExternal}>↗</a>
+            {activeLink.content_type === 'html' && (
+              <div style={{ fontSize: 10, fontWeight: 800, background: 'rgba(99,102,241,0.8)', color: 'white', padding: '3px 8px', borderRadius: 6, flexShrink: 0 }}>HTML</div>
+            )}
+            {activeLink.content_type === 'url' && activeLink.url && (
+              <a href={activeLink.url} target="_blank" rel="noopener noreferrer" style={S.iframeExternal}>↗</a>
+            )}
           </div>
-          <iframe
-            ref={iframeRef}
-            src={activeLink.url}
-            style={S.iframe}
-            title={activeLink.name}
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
-            sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-presentation"
-          />
+
+          {/* Loading indicator */}
+          {iframeLoading && (
+            <div style={{ position: 'absolute', top: 50, left: 0, right: 0, height: 3, background: '#EEF2FF', zIndex: 10 }}>
+              <div style={{ height: '100%', background: '#4F46E5', width: '70%', animation: 'none', transition: 'width 1s ease' }} />
+            </div>
+          )}
+
+          {/* iframe */}
+          {activeLink.content_type === 'html' ? (
+            <iframe
+              ref={iframeRef}
+              srcDoc={getIframeSrcdoc(activeLink)}
+              style={S.iframe}
+              title={activeLink.name}
+              onLoad={() => setIframeLoading(false)}
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
+              sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-pointer-lock allow-orientation-lock"
+            />
+          ) : (
+            <iframe
+              ref={iframeRef}
+              src={getIframeSrc(activeLink)}
+              style={S.iframe}
+              title={activeLink.name}
+              onLoad={() => setIframeLoading(false)}
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
+              sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-presentation"
+            />
+          )}
         </div>
       )}
     </div>
@@ -130,7 +188,6 @@ export default function FolderPage() {
 const S: Record<string, React.CSSProperties> = {
   page: { minHeight: '100vh', background: '#F0F4FF', display: 'flex', flexDirection: 'column' },
   center: { minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' },
-  spinWrap: { textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 },
   spinner: { width: 32, height: 32, border: '3px solid #E2E8F0', borderTopColor: '#4F46E5', borderRadius: '50%' },
   header: { background: 'linear-gradient(135deg,#4F46E5,#06B6D4)', padding: '0 14px', height: 58, display: 'flex', alignItems: 'center', gap: 12, position: 'sticky', top: 0, zIndex: 50 },
   back: { width: 36, height: 36, border: '1px solid rgba(255,255,255,0.3)', borderRadius: 10, background: 'rgba(255,255,255,0.15)', cursor: 'pointer', fontSize: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', flexShrink: 0 },
@@ -138,18 +195,17 @@ const S: Record<string, React.CSSProperties> = {
   headerTitle: { fontFamily: "'Plus Jakarta Sans',sans-serif", fontWeight: 800, fontSize: 17, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'white' },
   content: { padding: '16px 12px', flex: 1 },
   gridLabel: { fontSize: 12, fontWeight: 700, color: '#6366F1', marginBottom: 14, textTransform: 'uppercase', letterSpacing: '0.05em' },
-  appsGrid: { display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '20px 8px' },
+  appsGrid: { display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '20px 8px' },
   appItem: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, cursor: 'pointer', WebkitTapHighlightColor: 'transparent' },
-  appIcon: { width: 72, height: 72, borderRadius: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', transition: 'transform 0.15s', flexShrink: 0 },
+  appIcon: { width: 72, height: 72, borderRadius: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', transition: 'transform 0.15s', flexShrink: 0, position: 'relative' },
   appIconImg: { width: '100%', height: '100%', objectFit: 'cover' },
   appEmoji: { fontSize: 34, lineHeight: 1 },
   appName: { fontSize: 11, fontWeight: 600, color: '#1E293B', textAlign: 'center', lineHeight: 1.3, wordBreak: 'break-word', maxWidth: 76 },
   empty: { textAlign: 'center', padding: '60px 20px', color: '#64748B', fontSize: 14 },
-  // iframe overlay — penuh skrin dalam apps
   iframeOverlay: { position: 'fixed', inset: 0, zIndex: 200, display: 'flex', flexDirection: 'column', background: 'white' },
   iframeBar: { height: 50, background: 'linear-gradient(135deg,#4F46E5,#06B6D4)', display: 'flex', alignItems: 'center', padding: '0 12px', gap: 10, flexShrink: 0 },
   iframeBack: { padding: '6px 14px', background: 'rgba(255,255,255,0.2)', border: '1px solid rgba(255,255,255,0.3)', borderRadius: 20, color: 'white', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' },
   iframeTitle: { flex: 1, color: 'white', fontSize: 14, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: "'Plus Jakarta Sans',sans-serif" },
-  iframeExternal: { padding: '6px 10px', background: 'rgba(255,255,255,0.15)', border: '1px solid rgba(255,255,255,0.25)', borderRadius: 8, color: 'white', fontSize: 14, textDecoration: 'none' },
+  iframeExternal: { padding: '6px 10px', background: 'rgba(255,255,255,0.15)', border: '1px solid rgba(255,255,255,0.25)', borderRadius: 8, color: 'white', fontSize: 14, textDecoration: 'none', flexShrink: 0 },
   iframe: { flex: 1, width: '100%', border: 'none', display: 'block' },
 }

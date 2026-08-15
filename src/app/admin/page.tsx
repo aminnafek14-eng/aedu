@@ -61,7 +61,7 @@ export default function AdminPage() {
 
   // Forms
   const [fName, setFName] = useState(''); const [fImgData, setFImgData] = useState('')
-  const [lName, setLName] = useState(''); const [lUrl, setLUrl] = useState(''); const [lImgData, setLImgData] = useState('')
+  const [lName, setLName] = useState(''); const [lUrl, setLUrl] = useState(''); const [lImgData, setLImgData] = useState(''); const [lContentType, setLContentType] = useState<'url'|'html'>('url'); const [lHtmlContent, setLHtmlContent] = useState('')
   const [bTitle, setBTitle] = useState(''); const [bImgData, setBImgData] = useState(''); const [bLinkUrl, setBLinkUrl] = useState(''); const [bActive, setBActive] = useState(true)
   const [newStudentName, setNewStudentName] = useState(''); const [newStudentPhone, setNewStudentPhone] = useState(''); const [newStudentNote, setNewStudentNote] = useState('')
 
@@ -256,23 +256,43 @@ export default function AdminPage() {
     showToast('Folder dipadam'); loadAll()
   }
 
-  const openAddLink = (fi: number) => { setLName(''); setLUrl(''); setLImgData(''); setLinkModal({ open: true, folderIdx: fi, linkIdx: null }) }
-  const openEditLink = (fi: number, li: number) => { const lnk = folderLinks(fi)[li]; setLName(lnk.name); setLUrl(lnk.url); setLImgData(lnk.img_url || ''); setLinkModal({ open: true, folderIdx: fi, linkIdx: li }) }
+  const openAddLink = (fi: number) => { setLName(''); setLUrl(''); setLImgData(''); setLContentType('url'); setLHtmlContent(''); setLinkModal({ open: true, folderIdx: fi, linkIdx: null }) }
+  const openEditLink = (fi: number, li: number) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const lnk = folderLinks(fi)[li] as any
+    setLName(lnk.name); setLUrl(lnk.url || ''); setLImgData(lnk.img_url || '')
+    setLContentType(lnk.content_type || 'url'); setLHtmlContent(lnk.html_content || '')
+    setLinkModal({ open: true, folderIdx: fi, linkIdx: li })
+  }
   const saveLink = async () => {
     if (!lName.trim()) return showToast('Masukkan nama pautan', 'error')
-    if (!lUrl.trim()) return showToast('Masukkan URL', 'error')
-    let url = lUrl.trim(); if (!/^https?:\/\//i.test(url)) url = 'https://' + url
+    if (lContentType === 'url' && !lUrl.trim()) return showToast('Masukkan URL', 'error')
+    if (lContentType === 'html' && !lHtmlContent.trim()) return showToast('Paste kod HTML', 'error')
+    let url = lUrl.trim()
+    if (lContentType === 'url' && url && !/^https?:\/\//i.test(url)) url = 'https://' + url
     let imgUrl: string | null = null
     if (lImgData?.startsWith('data:')) imgUrl = await uploadImg(lImgData)
     else if (lImgData) imgUrl = lImgData
     const fi = linkModal.folderIdx!
+    const payload = {
+      folder_id: folders[fi].id,
+      name: lName.trim(),
+      url: lContentType === 'url' ? url : null,
+      html_content: lContentType === 'html' ? lHtmlContent.trim() : null,
+      content_type: lContentType,
+      img_url: imgUrl,
+      emoji: lContentType === 'html' ? '🎮' : '🔗',
+      order_num: folderLinks(fi).length
+    }
     if (linkModal.linkIdx === null) {
-      await supabase.from('links').insert({ folder_id: folders[fi].id, name: lName.trim(), url, img_url: imgUrl, emoji: '🎮', order_num: folderLinks(fi).length })
-      showToast('Pautan ditambah!', 'success')
+      await supabase.from('links').insert(payload)
+      showToast('Aktiviti ditambah!', 'success')
     } else {
       const lnk = folderLinks(fi)[linkModal.linkIdx!]
-      await supabase.from('links').update({ name: lName.trim(), url, img_url: imgUrl }).eq('id', lnk.id)
-      showToast('Pautan dikemaskini!', 'success')
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { folder_id, order_num, ...updatePayload } = payload
+      await supabase.from('links').update(updatePayload).eq('id', lnk.id)
+      showToast('Aktiviti dikemaskini!', 'success')
     }
     setLinkModal({ open: false, folderIdx: null, linkIdx: null }); loadAll()
   }
@@ -762,10 +782,73 @@ export default function AdminPage() {
         </Modal>
       )}
       {linkModal.open && (
-        <Modal title={linkModal.linkIdx === null ? `Tambah Pautan — ${folders[linkModal.folderIdx!]?.name}` : 'Edit Pautan'} onClose={() => setLinkModal({ open: false, folderIdx: null, linkIdx: null })}>
-          <FG label="Nama Pautan"><input style={inpStyle} placeholder="cth: Kuiz Matematik..." value={lName} onChange={e => setLName(e.target.value)} /></FG>
-          <FG label="URL"><input style={inpStyle} placeholder="https://..." value={lUrl} onChange={e => setLUrl(e.target.value)} type="url" /></FG>
-          <FG label="Gambar Pautan"><ImgUpload dataUrl={lImgData} onChange={setLImgData} onRead={readImg} /></FG>
+        <Modal title={linkModal.linkIdx === null ? `Tambah Aktiviti — ${folders[linkModal.folderIdx!]?.name}` : 'Edit Aktiviti'} onClose={() => setLinkModal({ open: false, folderIdx: null, linkIdx: null })}>
+          <FG label="Nama Aktiviti"><input style={inpStyle} placeholder="cth: Kuiz Matematik, Games Sains..." value={lName} onChange={e => setLName(e.target.value)} /></FG>
+
+          {/* Toggle URL / HTML */}
+          <FG label="Jenis Kandungan">
+            <div style={{ display: 'flex', gap: 8, marginBottom: 4 }}>
+              <button onClick={() => setLContentType('url')} style={{
+                flex: 1, padding: '10px', borderRadius: 10, border: `2px solid ${lContentType==='url'?'#4F46E5':'#E2E8F0'}`,
+                background: lContentType==='url'?'#EEF2FF':'white', color: lContentType==='url'?'#4F46E5':'#64748B',
+                fontWeight: 700, fontSize: 13, cursor: 'pointer', transition: 'all 0.15s'
+              }}>🔗 URL / Link</button>
+              <button onClick={() => setLContentType('html')} style={{
+                flex: 1, padding: '10px', borderRadius: 10, border: `2px solid ${lContentType==='html'?'#6366F1':'#E2E8F0'}`,
+                background: lContentType==='html'?'#EEF2FF':'white', color: lContentType==='html'?'#6366F1':'#64748B',
+                fontWeight: 700, fontSize: 13, cursor: 'pointer', transition: 'all 0.15s'
+              }}>{'</>'} Kod HTML</button>
+            </div>
+          </FG>
+
+          {/* URL input */}
+          {lContentType === 'url' && (
+            <FG label="URL Website">
+              <input style={inpStyle} placeholder="https://..." value={lUrl} onChange={e => setLUrl(e.target.value)} type="url" />
+              <p style={{ fontSize: 11, color: '#94A3B8', marginTop: 5 }}>Link ke website luar atau games online</p>
+            </FG>
+          )}
+
+          {/* HTML editor */}
+          {lContentType === 'html' && (
+            <FG label="Kod HTML">
+              <div style={{ position: 'relative' }}>
+                <textarea
+                  value={lHtmlContent}
+                  onChange={e => setLHtmlContent(e.target.value)}
+                  placeholder={'<!DOCTYPE html>\n<html>\n<head>\n  <title>Games</title>\n</head>\n<body>\n  <!-- Paste HTML anda di sini -->\n</body>\n</html>'}
+                  style={{
+                    ...inpStyle, height: 220, resize: 'vertical',
+                    fontFamily: 'monospace', fontSize: 12, lineHeight: 1.6,
+                    background: '#0F172A', color: '#E2E8F0', border: '2px solid #334155',
+                    borderRadius: 10, padding: '12px'
+                  }}
+                />
+                {lHtmlContent && (
+                  <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+                    <span style={{ fontSize: 11, color: '#94A3B8' }}>
+                      {lHtmlContent.length.toLocaleString()} aksara
+                      {lHtmlContent.length > 900000 && <span style={{ color: '#EF4444', marginLeft: 4 }}>⚠️ Hampir had 1MB</span>}
+                    </span>
+                    <button onClick={() => setLHtmlContent('')}
+                      style={{ marginLeft: 'auto', fontSize: 11, color: '#EF4444', background: 'none', border: 'none', cursor: 'pointer' }}>
+                      Padam
+                    </button>
+                  </div>
+                )}
+              </div>
+              <div style={{ background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: 8, padding: '8px 12px', marginTop: 8 }}>
+                <div style={{ fontSize: 11, color: '#15803D', fontWeight: 700, marginBottom: 3 }}>✅ Tips:</div>
+                <div style={{ fontSize: 11, color: '#166534', lineHeight: 1.6 }}>
+                  • Export HTML dari Scratch, Construct, GDevelop<br/>
+                  • Games HTML5, kuiz, animasi semua boleh<br/>
+                  • JavaScript dan CSS berfungsi sepenuhnya
+                </div>
+              </div>
+            </FG>
+          )}
+
+          <FG label="Gambar Ikon (pilihan)"><ImgUpload dataUrl={lImgData} onChange={setLImgData} onRead={readImg} /></FG>
           <ModalBtns onCancel={() => setLinkModal({ open: false, folderIdx: null, linkIdx: null })} onSave={saveLink} />
         </Modal>
       )}

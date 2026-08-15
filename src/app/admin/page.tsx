@@ -314,7 +314,7 @@ export default function AdminPage() {
   if (!authed) return (
     <div style={S.loginPage}>
       <div style={S.loginCard}>
-        <div style={S.loginLogo}>⚙️</div>
+        <div style={S.loginLogo}><img src='/logo.png' alt='AEdu' style={{width:90,height:90,objectFit:'contain'}}/></div>
         <h1 style={S.loginTitle}>AEdu Admin</h1>
         <p style={S.loginSub}>Panel pengurusan — akses terhad</p>
         <input type="password" style={S.pwInput} placeholder="Kata laluan admin" value={pw}
@@ -824,7 +824,7 @@ function ModalBtns({onCancel,onSave}:{onCancel:()=>void;onSave:()=>void}){
 const S:Record<string,React.CSSProperties>={
   loginPage:{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',background:'linear-gradient(135deg,#1e1b4b 0%,#312e81 100%)',padding:16},
   loginCard:{background:'white',borderRadius:24,padding:'40px 28px',width:'100%',maxWidth:360,textAlign:'center',boxShadow:'0 24px 64px rgba(0,0,0,0.3)'},
-  loginLogo:{width:64,height:64,background:'linear-gradient(135deg,#312e81,#4F46E5)',borderRadius:18,display:'flex',alignItems:'center',justifyContent:'center',fontSize:30,margin:'0 auto 14px'},
+  loginLogo:{width:90,height:90,margin:'0 auto 14px',display:'flex',alignItems:'center',justifyContent:'center'},
   loginTitle:{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:24,fontWeight:900,color:'#0F172A',marginBottom:4},
   loginSub:{color:'#64748B',fontSize:13,marginBottom:24},
   pwInput:{width:'100%',padding:'13px 16px',border:'2px solid #E2E8F0',borderRadius:10,fontSize:16,letterSpacing:6,textAlign:'center',outline:'none',marginBottom:12},

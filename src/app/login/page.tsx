@@ -66,7 +66,7 @@ export default function LoginPage() {
   return (
     <div style={S.page}>
       <div style={S.card}>
-        <div style={S.logo}>🎓</div>
+        <div style={S.logo}><img src='/logo.png' alt='AEdu' style={{ width: 100, height: 100, objectFit: 'contain' }} /></div>
         <h1 style={S.title}>AEdu</h1>
         <p style={S.sub}>Portal Gamifikasi Pendidikan</p>
 
@@ -106,7 +106,7 @@ const S: Record<string, React.CSSProperties> = {
   page: { minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg,#4F46E5 0%,#06B6D4 100%)', padding: 16 },
   loadDot: { width: 40, height: 40, borderRadius: '50%', border: '3px solid rgba(255,255,255,0.3)', borderTopColor: 'white' },
   card: { background: 'white', borderRadius: 24, padding: '40px 28px', width: '100%', maxWidth: 380, boxShadow: '0 24px 64px rgba(0,0,0,0.2)', textAlign: 'center' },
-  logo: { width: 72, height: 72, background: 'linear-gradient(135deg,#4F46E5,#06B6D4)', borderRadius: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 34, margin: '0 auto 14px' },
+  logo: { width: 100, height: 100, margin: '0 auto 14px', display: 'flex', alignItems: 'center', justifyContent: 'center' },
   title: { fontFamily: "'Plus Jakarta Sans',sans-serif", fontSize: 28, fontWeight: 900, background: 'linear-gradient(135deg,#4F46E5,#06B6D4)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', marginBottom: 4 },
   sub: { color: '#64748B', fontSize: 13, marginBottom: 16 },
   premiumBadge: { background: 'linear-gradient(135deg,#F59E0B,#D97706)', color: 'white', borderRadius: 20, padding: '6px 16px', fontSize: 12, fontWeight: 700, marginBottom: 20, display: 'inline-block' },

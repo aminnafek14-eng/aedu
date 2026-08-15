@@ -87,7 +87,7 @@ export default function StudentHome() {
       {/* Header */}
       <div style={S.header}>
         <div style={S.headerTop}>
-          <div style={S.brand}>🎓 AEdu</div>
+          <div style={S.brand}><img src='/logo.png' alt='AEdu' style={{height:36,objectFit:'contain',marginRight:6}}/> AEdu</div>
           <button style={S.logoutBtn} onClick={logout}>Keluar</button>
         </div>
         {student && (

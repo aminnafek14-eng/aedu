@@ -139,7 +139,7 @@ export default function SignupPage() {
   if (step === 'form') return (
     <div style={S.page}>
       <div style={S.card}>
-        <div style={S.logo}>🎓</div>
+        <div style={S.logo}><img src='/logo.png' alt='AEdu' style={{ width: 90, height: 90, objectFit: 'contain' }} /></div>
         <h1 style={S.title}>Daftar Akaun</h1>
         <p style={S.sub}>
           {paymentRequired ? `Akses Lifetime • RM${payInfo.price}` : 'Percuma — Daftar Sekarang!'}
@@ -322,7 +322,7 @@ export default function SignupPage() {
 const S: Record<string, React.CSSProperties> = {
   page: { minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg,#4F46E5 0%,#06B6D4 100%)', padding: 16 },
   card: { background: 'white', borderRadius: 24, padding: '36px 24px', width: '100%', maxWidth: 400, boxShadow: '0 24px 64px rgba(0,0,0,0.2)', textAlign: 'center' },
-  logo: { width: 64, height: 64, background: 'linear-gradient(135deg,#4F46E5,#06B6D4)', borderRadius: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 30, margin: '0 auto 14px' },
+  logo: { width: 90, height: 90, margin: '0 auto 14px', display: 'flex', alignItems: 'center', justifyContent: 'center' },
   title: { fontFamily: "'Plus Jakarta Sans',sans-serif", fontSize: 24, fontWeight: 900, background: 'linear-gradient(135deg,#4F46E5,#06B6D4)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', marginBottom: 4 },
   sub: { color: '#64748B', fontSize: 13, marginBottom: 20 },
   priceBanner: { display: 'flex', alignItems: 'center', background: 'linear-gradient(135deg,#FFF7ED,#FFFBEB)', border: '1px solid #FDE68A', borderRadius: 14, padding: '14px 16px', marginBottom: 20, textAlign: 'left' },

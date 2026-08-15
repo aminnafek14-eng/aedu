@@ -297,22 +297,28 @@ export default function AdminPage() {
         {tab==='overview'&&(
           <>
             <div style={S.statsGrid}>
-              {[
-                {label:'🟢 Dalam Talian',val:online,live:true},
-                {label:'👥 Murid Berdaftar',val:students.length,live:false},
-                {label:'⭐ Akses Aktif',val:subscribedCount,live:false},
-                {label:'🔗 Pautan',val:links.length,live:false},
-              ].map(s=>(
-                <div key={s.label} style={S.statCard}>
-                  <div style={S.statLabel}>{s.label}</div>
-                  <div style={S.statVal}>{s.val}{s.live&&<span style={S.liveDot}/>}</div>
-                  {s.label.includes('Akses')&&(
-                    <div style={{fontSize:10,color:paymentRequired?'#F59E0B':'#10B981',marginTop:4,fontWeight:600}}>
-                      {paymentRequired?'🔒 Mod Berbayar':'🔓 Mod Percuma'}
-                    </div>
-                  )}
+              <div style={{...S.statCard,background:'linear-gradient(135deg,#4F46E5,#6366F1)',border:'none'}}>
+                <div style={{fontSize:11,color:'rgba(255,255,255,0.75)',fontWeight:700,textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:8}}>🟢 Dalam Talian</div>
+                <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:36,fontWeight:900,color:'white',display:'flex',alignItems:'center',gap:8}}>
+                  {online}<span style={{width:8,height:8,background:'#4ADE80',borderRadius:'50%',display:'inline-block',boxShadow:'0 0 0 3px rgba(74,222,128,0.3)'}}/>
                 </div>
-              ))}
+                <div style={{fontSize:11,color:'rgba(255,255,255,0.6)',marginTop:4}}>pengguna aktif sekarang</div>
+              </div>
+              <div style={{...S.statCard,background:'linear-gradient(135deg,#0EA5E9,#06B6D4)',border:'none'}}>
+                <div style={{fontSize:11,color:'rgba(255,255,255,0.75)',fontWeight:700,textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:8}}>👥 Murid Daftar</div>
+                <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:36,fontWeight:900,color:'white'}}>{students.length}</div>
+                <div style={{fontSize:11,color:'rgba(255,255,255,0.6)',marginTop:4}}>jumlah keseluruhan</div>
+              </div>
+              <div style={{...S.statCard,background:'linear-gradient(135deg,#10B981,#059669)',border:'none'}}>
+                <div style={{fontSize:11,color:'rgba(255,255,255,0.75)',fontWeight:700,textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:8}}>⭐ Akses Aktif</div>
+                <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:36,fontWeight:900,color:'white'}}>{subscribedCount}</div>
+                <div style={{fontSize:11,color:'rgba(255,255,255,0.6)',marginTop:4}}>{paymentRequired?'🔒 Mod Berbayar':'🔓 Mod Percuma'}</div>
+              </div>
+              <div style={{...S.statCard,background:'linear-gradient(135deg,#F59E0B,#D97706)',border:'none'}}>
+                <div style={{fontSize:11,color:'rgba(255,255,255,0.75)',fontWeight:700,textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:8}}>🔗 Pautan</div>
+                <div style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:36,fontWeight:900,color:'white'}}>{links.length}</div>
+                <div style={{fontSize:11,color:'rgba(255,255,255,0.6)',marginTop:4}}>dalam {folders.length} folder</div>
+              </div>
             </div>
             <div style={S.section}>
               <div style={S.sectionHdr}>
@@ -416,39 +422,31 @@ export default function AdminPage() {
                   ?<p style={{textAlign:'center',color:'#94A3B8',padding:24,fontSize:13}}>Tiada murid ditemui</p>
                   :filteredStudents.map(s=>(
                     <div key={s.id} style={{
-                      display:'flex',alignItems:'center',gap:10,padding:'10px 12px',
-                      borderRadius:10,border:'1px solid #E2E8F0',background:'white'
+                      display:'flex',alignItems:'center',gap:12,padding:'12px 14px',
+                      borderRadius:12,border:s.is_subscribed?'1px solid #BBF7D0':'1px solid #E2E8F0',
+                      background:s.is_subscribed?'#F0FDF4':'white',transition:'all 0.2s'
                     }}>
-                      {/* Status indicator */}
                       <div style={{
-                        width:36,height:36,borderRadius:10,flexShrink:0,
-                        background:s.is_subscribed?'#ECFDF5':'#FEF2F2',
-                        display:'flex',alignItems:'center',justifyContent:'center',fontSize:18
+                        width:40,height:40,borderRadius:12,flexShrink:0,
+                        background:s.is_subscribed?'linear-gradient(135deg,#10B981,#059669)':'linear-gradient(135deg,#94A3B8,#64748B)',
+                        display:'flex',alignItems:'center',justifyContent:'center',
+                        fontSize:16,fontWeight:800,color:'white'
                       }}>
-                        {s.is_subscribed?'✅':'❌'}
+                        {s.full_name.charAt(0)}
                       </div>
                       <div style={{flex:1,minWidth:0}}>
-                        <div style={{fontSize:13,fontWeight:700}}>{s.full_name}</div>
-                        <div style={{fontSize:10,color:'#94A3B8'}}>📞 {s.parent_phone}</div>
-                        {s.subscription_note&&<div style={{fontSize:10,color:'#6366F1',marginTop:1}}>📝 {s.subscription_note}</div>}
+                        <div style={{fontSize:13,fontWeight:700,color:'#0F172A'}}>{s.full_name}</div>
+                        <div style={{fontSize:11,color:'#64748B',marginTop:1}}>📞 {s.parent_phone}</div>
+                        {s.subscription_note&&<div style={{fontSize:10,color:'#6366F1',marginTop:2,fontWeight:600}}>📝 {s.subscription_note}</div>}
                       </div>
-                      <div style={{textAlign:'right',flexShrink:0}}>
-                        <div style={{
-                          fontSize:10,fontWeight:700,marginBottom:4,
-                          color:s.is_subscribed?'#10B981':'#94A3B8'
-                        }}>
+                      <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:4,flexShrink:0}}>
+                        <span style={{fontSize:9,fontWeight:800,letterSpacing:'0.06em',color:s.is_subscribed?'#10B981':'#94A3B8',textTransform:'uppercase'}}>
                           {s.is_subscribed?'AKTIF':'TIDAK AKTIF'}
+                        </span>
+                        <div onClick={()=>toggleStudentSub(s.id,s.is_subscribed,s.full_name)}
+                          style={{width:48,height:26,borderRadius:13,background:s.is_subscribed?'#10B981':'#CBD5E1',position:'relative',cursor:'pointer',transition:'background 0.3s',flexShrink:0,boxShadow:s.is_subscribed?'0 0 0 3px rgba(16,185,129,0.2)':'none'}}>
+                          <span style={{position:'absolute',top:3,left:s.is_subscribed?24:3,width:20,height:20,borderRadius:'50%',background:'white',transition:'left 0.3s',boxShadow:'0 2px 6px rgba(0,0,0,0.2)',display:'block'}}/>
                         </div>
-                        <button
-                          onClick={()=>toggleStudentSub(s.id,s.is_subscribed,s.full_name)}
-                          style={{
-                            padding:'5px 12px',borderRadius:20,border:'none',cursor:'pointer',
-                            fontSize:11,fontWeight:700,
-                            background:s.is_subscribed?'#FEF2F2':'#ECFDF5',
-                            color:s.is_subscribed?'#EF4444':'#10B981'
-                          }}>
-                          {s.is_subscribed?'Lumpuhkan':'Aktifkan'}
-                        </button>
                       </div>
                     </div>
                   ))}
@@ -673,23 +671,23 @@ const S:Record<string,React.CSSProperties>={
   pwInput:{width:'100%',padding:'13px 16px',border:'2px solid #E2E8F0',borderRadius:10,fontSize:16,letterSpacing:6,textAlign:'center',outline:'none',marginBottom:12},
   pwBtn:{width:'100%',padding:13,background:'linear-gradient(135deg,#312e81,#4F46E5)',color:'white',border:'none',borderRadius:10,fontSize:14,fontWeight:700,cursor:'pointer',marginBottom:16},
   backToApp:{fontSize:12,color:'#94A3B8',textDecoration:'none'},
-  topbar:{background:'#1e1b4b',padding:'0 16px',height:52,display:'flex',alignItems:'center',justifyContent:'space-between',position:'sticky',top:0,zIndex:100},
+  topbar:{background:'linear-gradient(135deg,#1e1b4b 0%,#4F46E5 100%)',padding:'0 16px',height:56,display:'flex',alignItems:'center',justifyContent:'space-between',position:'sticky',top:0,zIndex:100,boxShadow:'0 4px 24px rgba(79,70,229,0.25)'},
   topbarBrand:{fontFamily:"'Plus Jakarta Sans',sans-serif",fontWeight:800,fontSize:16,color:'white'},
   topbarExit:{fontSize:12,color:'rgba(255,255,255,0.7)',textDecoration:'none',padding:'6px 12px',background:'rgba(255,255,255,0.1)',borderRadius:7,border:'1px solid rgba(255,255,255,0.15)'},
   liveDot:{display:'inline-block',width:7,height:7,background:'#10B981',borderRadius:'50%',marginLeft:4},
-  tabBar:{background:'white',borderBottom:'1px solid #E2E8F0',padding:'0 8px',display:'flex',gap:0,overflowX:'auto'},
+  tabBar:{background:'white',borderBottom:'1px solid #E2E8F0',padding:'0 8px',display:'flex',gap:0,overflowX:'auto',boxShadow:'0 2px 8px rgba(0,0,0,0.04)'},
   tabBtn:{padding:'12px 10px',border:'none',background:'none',fontSize:12,fontWeight:600,cursor:'pointer',color:'#64748B',whiteSpace:'nowrap',borderBottom:'2px solid transparent',display:'flex',alignItems:'center',gap:4},
   tabActive:{color:'#4F46E5',borderBottom:'2px solid #4F46E5'},
   activePill:{background:'#4F46E5',color:'white',fontSize:9,fontWeight:800,padding:'1px 6px',borderRadius:10},
-  main:{padding:'12px',maxWidth:700,margin:'0 auto'},
+  main:{padding:'16px',maxWidth:720,margin:'0 auto'},
   statsGrid:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:12},
-  statCard:{background:'white',borderRadius:14,padding:'14px',border:'1px solid #E2E8F0',boxShadow:'0 2px 6px rgba(0,0,0,0.05)'},
+  statCard:{background:'white',borderRadius:16,padding:'16px',border:'1px solid #E2E8F0',boxShadow:'0 4px 16px rgba(0,0,0,0.06)',transition:'transform 0.2s'},
   statLabel:{fontSize:10,color:'#64748B',fontWeight:600,textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:6},
-  statVal:{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:28,fontWeight:800,display:'flex',alignItems:'center'},
-  section:{background:'white',borderRadius:14,border:'1px solid #E2E8F0',boxShadow:'0 2px 6px rgba(0,0,0,0.05)',marginBottom:12,overflow:'hidden'},
+  statVal:{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:32,fontWeight:900,display:'flex',alignItems:'center',letterSpacing:'-1px'},
+  section:{background:'white',borderRadius:18,border:'1px solid #E2E8F0',boxShadow:'0 4px 20px rgba(0,0,0,0.06)',marginBottom:14,overflow:'hidden'},
   sectionHdr:{padding:'13px 14px',borderBottom:'1px solid #E2E8F0',display:'flex',alignItems:'center',justifyContent:'space-between'},
   sectionTitle:{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:14,fontWeight:700},
-  addBtn:{padding:'7px 13px',background:'#4F46E5',color:'white',border:'none',borderRadius:8,fontSize:12,fontWeight:600,cursor:'pointer'},
+  addBtn:{padding:'8px 16px',background:'linear-gradient(135deg,#4F46E5,#6366F1)',color:'white',border:'none',borderRadius:10,fontSize:12,fontWeight:700,cursor:'pointer',boxShadow:'0 4px 12px rgba(79,70,229,0.3)'},
   folderRow:{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',background:'#F8FAFC',cursor:'pointer'},
   folderThumb:{width:42,height:42,borderRadius:9,overflow:'hidden',background:'#EEF2FF',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0},
   folderNameA:{flex:1,fontSize:13,fontWeight:600},

@@ -2,7 +2,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { supabase, type Folder, type Link, type Banner, type Student } from '@/lib/supabase'
 
-type Tab = 'overview' | 'folders' | 'banners' | 'students' | 'subscription'
+type Tab = 'overview' | 'folders' | 'banners' | 'students' | 'subscription' | 'payment'
 const ADMIN_PW = '050505'
 
 export default function AdminPage() {
@@ -17,6 +17,12 @@ export default function AdminPage() {
   const [students, setStudents] = useState<any[]>([])
   const [paymentRequired, setPaymentRequired] = useState(false)
   const [togglingPayment, setTogglingPayment] = useState(false)
+  const [paySettings, setPaySettings] = useState({
+    price: '50', instructions: 'Sila buat bayaran melalui:', bank: 'Maybank',
+    accountName: '', accountNumber: '', qrUrl: '', whatsapp: ''
+  })
+  const [savingPaySettings, setSavingPaySettings] = useState(false)
+  const [payQrData, setPayQrData] = useState('')
 
   // Realtime presence
   const [online, setOnline] = useState(0)
@@ -62,6 +68,24 @@ export default function AdminPage() {
     setFolders(f || []); setLinks(l || [])
     setBanners(b || []); setStudents(s || [])
     setPaymentRequired(settings?.value === 'true')
+    // Load payment settings
+    {
+      const { data: allSettings } = await supabase.from('app_settings').select('key,value')
+      if (allSettings) {
+        const m: Record<string,string> = {}
+        allSettings.forEach((s: {key:string;value:string}) => { m[s.key] = s.value })
+        setPaySettings({
+          price: m['payment_price'] || '50',
+          instructions: m['payment_instructions'] || '',
+          bank: m['payment_bank'] || '',
+          accountName: m['payment_account_name'] || '',
+          accountNumber: m['payment_account_number'] || '',
+          qrUrl: m['payment_qr_url'] || '',
+          whatsapp: m['payment_whatsapp'] || '',
+        })
+        setPayQrData(m['payment_qr_url'] || '')
+      }
+    }
   }
 
   // ── TOGGLE PAYMENT MODE ──
@@ -73,6 +97,38 @@ export default function AdminPage() {
     setPaymentRequired(newVal)
     showToast(newVal ? '🔒 Mod Berbayar DIAKTIFKAN' : '🔓 Mod Percuma DIAKTIFKAN', 'success')
     setTogglingPayment(false)
+  }
+
+  // ── SAVE PAYMENT SETTINGS ──
+  const savePaySettings = async () => {
+    setSavingPaySettings(true)
+    let qrUrl = paySettings.qrUrl
+    if (payQrData && payQrData.startsWith('data:')) {
+      const arr = payQrData.split(','), mime = arr[0].match(/:(.*?);/)![1]
+      const bstr = atob(arr[1]); const u8 = new Uint8Array(bstr.length)
+      for (let i = 0; i < bstr.length; i++) u8[i] = bstr.charCodeAt(i)
+      const blob = new Blob([u8], { type: mime })
+      const fname = `qr_${Date.now()}.${mime.split('/')[1]}`
+      const { error } = await supabase.storage.from('images').upload(fname, blob)
+      if (!error) {
+        qrUrl = supabase.storage.from('images').getPublicUrl(fname).data.publicUrl
+      }
+    }
+    const updates = [
+      { key: 'payment_price', value: paySettings.price },
+      { key: 'payment_instructions', value: paySettings.instructions },
+      { key: 'payment_bank', value: paySettings.bank },
+      { key: 'payment_account_name', value: paySettings.accountName },
+      { key: 'payment_account_number', value: paySettings.accountNumber },
+      { key: 'payment_qr_url', value: qrUrl },
+      { key: 'payment_whatsapp', value: paySettings.whatsapp },
+    ]
+    for (const u of updates) {
+      await supabase.from('app_settings').upsert({ key: u.key, value: u.value, updated_at: new Date().toISOString() })
+    }
+    setPaySettings(p => ({ ...p, qrUrl }))
+    showToast('Tetapan bayaran disimpan! ✅', 'success')
+    setSavingPaySettings(false)
   }
 
   // ── SUBSCRIPTION MURID ──
@@ -283,9 +339,9 @@ export default function AdminPage() {
 
       {/* Tabs */}
       <div style={S.tabBar}>
-        {(['overview','folders','banners','students','subscription'] as Tab[]).map(t=>(
+        {(['overview','folders','banners','students','subscription','payment'] as Tab[]).map(t=>(
           <button key={t} style={{...S.tabBtn,...(tab===t?S.tabActive:{})}} onClick={()=>setTab(t)}>
-            {{overview:'📊 Overview',folders:'📁 Folder',banners:'🖼️ Banner',students:'👥 Murid',subscription:'⭐ Langganan'}[t]}
+            {{overview:'📊 Overview',folders:'📁 Folder',banners:'🖼️ Banner',students:'👥 Murid',subscription:'⭐ Langganan',payment:'💳 Bayaran'}[t]}
             {t==='subscription'&&paymentRequired&&<span style={S.activePill}>ON</span>}
           </button>
         ))}
@@ -453,6 +509,109 @@ export default function AdminPage() {
               </div>
             </div>
           </>
+        )}
+
+        {/* PAYMENT SETTINGS */}
+        {tab==='payment'&&(
+          <div style={S.section}>
+            <div style={S.sectionHdr}>
+              <h3 style={S.sectionTitle}>💳 Tetapan Bayaran Manual</h3>
+              <button style={{...S.addBtn,opacity:savingPaySettings?0.7:1}} onClick={savePaySettings} disabled={savingPaySettings}>
+                {savingPaySettings?'Menyimpan...':'💾 Simpan'}
+              </button>
+            </div>
+            <div style={{padding:'16px',display:'flex',flexDirection:'column',gap:14}}>
+
+              {/* Status */}
+              <div style={{background:paymentRequired?'#FFF7ED':'#F0FDF4',border:`1px solid ${paymentRequired?'#FDE68A':'#BBF7D0'}`,borderRadius:12,padding:'14px 16px',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+                <div>
+                  <div style={{fontWeight:700,fontSize:13,color:'#0F172A',marginBottom:2}}>{paymentRequired?'🔒 Mod Berbayar Aktif':'🔓 Mod Percuma Aktif'}</div>
+                  <div style={{fontSize:11,color:'#64748B'}}>{paymentRequired?'Pengguna perlu bayar untuk daftar':'Pengguna boleh daftar secara percuma'}</div>
+                </div>
+                <div onClick={togglePaymentMode} style={{width:48,height:26,borderRadius:13,background:paymentRequired?'#4F46E5':'#CBD5E1',position:'relative',cursor:'pointer',transition:'background 0.3s',flexShrink:0}}>
+                  <span style={{position:'absolute',top:3,left:paymentRequired?24:3,width:20,height:20,borderRadius:'50%',background:'white',transition:'left 0.3s',boxShadow:'0 2px 6px rgba(0,0,0,0.2)',display:'block'}}/>
+                </div>
+              </div>
+
+              {/* Price */}
+              <div>
+                <label style={S.flabel}>💰 Harga (RM)</label>
+                <div style={{display:'flex',alignItems:'center',gap:8}}>
+                  <span style={{fontSize:20,fontWeight:800,color:'#4F46E5'}}>RM</span>
+                  <input style={{...S.inp,fontSize:24,fontWeight:900,color:'#4F46E5',width:120,textAlign:'center'}}
+                    type="number" min="1" value={paySettings.price}
+                    onChange={e=>setPaySettings(p=>({...p,price:e.target.value}))}/>
+                  <span style={{fontSize:13,color:'#64748B'}}>/ Lifetime</span>
+                </div>
+              </div>
+
+              {/* Instructions */}
+              <div>
+                <label style={S.flabel}>📋 Arahan Pembayaran</label>
+                <textarea style={{...S.inp,height:70,resize:'none'}}
+                  placeholder="cth: Sila buat bayaran ke akaun berikut..."
+                  value={paySettings.instructions}
+                  onChange={e=>setPaySettings(p=>({...p,instructions:e.target.value}))}/>
+              </div>
+
+              {/* Bank info */}
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+                <div>
+                  <label style={S.flabel}>🏦 Nama Bank</label>
+                  <input style={S.inp} placeholder="cth: Maybank, CIMB..." value={paySettings.bank}
+                    onChange={e=>setPaySettings(p=>({...p,bank:e.target.value}))}/>
+                </div>
+                <div>
+                  <label style={S.flabel}>👤 Nama Akaun</label>
+                  <input style={S.inp} placeholder="Nama penerima..." value={paySettings.accountName}
+                    onChange={e=>setPaySettings(p=>({...p,accountName:e.target.value}))}/>
+                </div>
+              </div>
+
+              <div>
+                <label style={S.flabel}>🔢 Nombor Akaun</label>
+                <input style={{...S.inp,fontFamily:'monospace',fontSize:16,fontWeight:700,letterSpacing:2}}
+                  placeholder="cth: 1234567890" value={paySettings.accountNumber}
+                  onChange={e=>setPaySettings(p=>({...p,accountNumber:e.target.value}))}/>
+              </div>
+
+              {/* WhatsApp */}
+              <div>
+                <label style={S.flabel}>💬 Nombor WhatsApp Admin (dengan kod negara)</label>
+                <input style={S.inp} placeholder="cth: 601234567890" value={paySettings.whatsapp}
+                  onChange={e=>setPaySettings(p=>({...p,whatsapp:e.target.value}))}/>
+                <p style={{fontSize:11,color:'#94A3B8',marginTop:4}}>Murid akan dihubungkan ke WhatsApp anda selepas bayar</p>
+              </div>
+
+              {/* QR Code */}
+              <div>
+                <label style={S.flabel}>📱 QR Code Bayaran (pilihan)</label>
+                <div style={{border:'2px dashed #E2E8F0',borderRadius:12,overflow:'hidden',cursor:'pointer',background:'#F8FAFC',position:'relative',minHeight:100,display:'flex',alignItems:'center',justifyContent:'center'}}
+                  onClick={()=>document.getElementById('qrInput')?.click()}>
+                  {payQrData||paySettings.qrUrl
+                    ?<><img src={payQrData||paySettings.qrUrl} alt="QR" style={{width:'100%',maxHeight:180,objectFit:'contain',display:'block'}}/>
+                      <button style={{position:'absolute',top:6,right:6,width:26,height:26,borderRadius:'50%',background:'rgba(0,0,0,0.5)',color:'white',border:'none',cursor:'pointer',fontSize:12}}
+                        onClick={e=>{e.stopPropagation();setPayQrData('');setPaySettings(p=>({...p,qrUrl:''}))}}>✕</button></>
+                    :<div style={{textAlign:'center',padding:20,color:'#94A3B8'}}><div style={{fontSize:28,marginBottom:6}}>📱</div><div style={{fontSize:12}}>Muat naik QR Code (pilihan)</div></div>}
+                  <input id="qrInput" type="file" accept="image/*" style={{display:'none'}}
+                    onChange={e=>{const f=e.target.files?.[0];if(f){const r=new FileReader();r.onload=ev=>setPayQrData(ev.target!.result as string);r.readAsDataURL(f)}}}/>
+                </div>
+              </div>
+
+              {/* Preview */}
+              <div style={{background:'#F0F4FF',border:'1px solid #C7D2FE',borderRadius:12,padding:'14px 16px'}}>
+                <div style={{fontSize:12,fontWeight:700,color:'#4F46E5',marginBottom:8}}>👁️ Pratonton — Apa murid akan nampak:</div>
+                <div style={{fontSize:13,color:'#475569',lineHeight:1.8}}>
+                  <div>💰 Harga: <strong>RM {paySettings.price}</strong> (Lifetime)</div>
+                  <div>🏦 Bank: <strong>{paySettings.bank||'-'}</strong></div>
+                  <div>👤 Nama: <strong>{paySettings.accountName||'-'}</strong></div>
+                  <div>🔢 Akaun: <strong>{paySettings.accountNumber||'-'}</strong></div>
+                  {paySettings.whatsapp&&<div>💬 WhatsApp: <strong>{paySettings.whatsapp}</strong></div>}
+                </div>
+              </div>
+
+            </div>
+          </div>
         )}
 
         {/* FOLDERS */}
@@ -698,4 +857,5 @@ const S:Record<string,React.CSSProperties>={
   logEntry:{display:'flex',alignItems:'center',gap:8,padding:'6px 10px',borderRadius:7,background:'#F8FAFC'},
   inp:{width:'100%',padding:'11px 13px',border:'2px solid #E2E8F0',borderRadius:9,fontSize:14,outline:'none',fontFamily:"'Inter',sans-serif",background:'#F8FAFC'},
   toast:{position:'fixed',bottom:20,left:'50%',transform:'translateX(-50%)',color:'white',padding:'10px 20px',borderRadius:100,fontSize:13,fontWeight:500,zIndex:999,boxShadow:'0 6px 20px rgba(0,0,0,0.2)',whiteSpace:'nowrap'},
+  flabel:{display:'block',fontSize:11,fontWeight:700,color:'#64748B',textTransform:'uppercase' as const,letterSpacing:'0.05em',marginBottom:6},
 }

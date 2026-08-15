@@ -48,11 +48,13 @@ export default function LoginPage() {
       setLoading(false); return
     }
 
-    sessionStorage.setItem('aedu_student', JSON.stringify({
+    const studentData = JSON.stringify({
       id: data.id,
       full_name: data.full_name,
       is_subscribed: data.is_subscribed,
-    }))
+    })
+    sessionStorage.setItem('aedu_student', studentData)
+    localStorage.setItem('aedu_student', studentData)
     router.replace('/')
     setLoading(false)
   }

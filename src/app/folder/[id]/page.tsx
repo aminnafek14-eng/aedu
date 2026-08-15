@@ -30,8 +30,10 @@ export default function FolderPage() {
   const iframeRef = useRef<HTMLIFrameElement>(null)
 
   useEffect(() => {
-    const s = sessionStorage.getItem('aedu_student')
+    const s = localStorage.getItem('aedu_student') || sessionStorage.getItem('aedu_student')
     if (!s) { router.replace('/login'); return }
+    // Pastikan simpan dalam localStorage
+    if (s) localStorage.setItem('aedu_student', s)
     loadData()
   }, [id])
 

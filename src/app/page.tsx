@@ -25,13 +25,17 @@ export default function StudentHome() {
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
 
   useEffect(() => {
-    const saved = sessionStorage.getItem('aedu_student')
+    // Guna localStorage supaya data kekal walaupun iframe dibuka
+    const saved = localStorage.getItem('aedu_student') || sessionStorage.getItem('aedu_student')
     if (!saved) { router.replace('/login'); return }
     const s = JSON.parse(saved)
+    // Simpan semula dalam localStorage untuk persistence
+    localStorage.setItem('aedu_student', saved)
     setStudent(s)
-    // Load data dulu, kemudian join presence
     loadData().then(() => joinPresence(s))
-    return () => { channelRef.current?.unsubscribe() }
+    // Fallback: kalau loading lebih 5 saat, paksa tunjuk content
+    const timeout = setTimeout(() => setLoading(false), 5000)
+    return () => { channelRef.current?.unsubscribe(); clearTimeout(timeout) }
   }, [])
 
   const joinPresence = (s: { id: string; full_name: string }) => {
@@ -69,6 +73,7 @@ export default function StudentHome() {
   const logout = () => {
     channelRef.current?.unsubscribe()
     sessionStorage.removeItem('aedu_student')
+    localStorage.removeItem('aedu_student')
     router.replace('/login')
   }
 

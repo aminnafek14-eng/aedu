@@ -69,7 +69,7 @@ export default function LoginPage() {
     <div style={S.page}>
       <div style={S.card}>
         <div style={S.logo}><img src='/logo.png' alt='AEdu' style={{ width: 100, height: 100, objectFit: 'contain' }} /></div>
-        <h1 style={S.title}>AEdu</h1>
+        <h1 style={S.title}>AEdu.my</h1>
         <p style={S.sub}>Portal Gamifikasi Pendidikan</p>
 
         {paymentRequired && (

@@ -99,6 +99,9 @@ export default function LoginPage() {
 
         <div style={S.divider}><span>Belum ada akaun?</span></div>
         <Link href="/signup" style={S.signupLink}>Daftar Sekarang</Link>
+        <div style={{marginTop:20,paddingTop:16,borderTop:'1px solid #F1F5F9',fontSize:11,color:'#94A3B8',textAlign:'center'}}>
+          Disediakan oleh <strong style={{color:'#64748B'}}>Cikgu Amin</strong> (A-Edu.my) @2026
+        </div>
       </div>
     </div>
   )

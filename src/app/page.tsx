@@ -82,7 +82,7 @@ export default function StudentHome() {
       <div style={S.loadingWrap}>
         <div style={S.loadingLogo}>🎓</div>
         <div style={S.loadingBar}><div style={S.loadingFill} /></div>
-        <p style={S.loadingText}>Memuatkan AEdu...</p>
+        <p style={S.loadingText}>Memuatkan AEdu.my...</p>
       </div>
     </div>
   )
@@ -92,7 +92,7 @@ export default function StudentHome() {
       {/* Header */}
       <div style={S.header}>
         <div style={S.headerTop}>
-          <div style={S.brand}><img src='/logo.png' alt='AEdu' style={{height:36,objectFit:'contain',marginRight:6}}/> AEdu</div>
+          <div style={S.brand}><img src='/logo.png' alt='AEdu' style={{height:36,objectFit:'contain',marginRight:6}}/> AEdu.my</div>
           <button style={S.logoutBtn} onClick={logout}>Keluar</button>
         </div>
         {student && (

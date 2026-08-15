@@ -1,11 +1,8 @@
 'use client'
-// ── AEdu Admin Panel ──
-// Route: /admin — completely separate from student view
-import { useEffect, useState, useRef, useCallback } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { supabase, type Folder, type Link, type Banner, type Student } from '@/lib/supabase'
 
 type Tab = 'overview' | 'folders' | 'banners' | 'students'
-
 const ADMIN_PW = '050505'
 
 export default function AdminPage() {
@@ -17,29 +14,33 @@ export default function AdminPage() {
   const [links, setLinks] = useState<Link[]>([])
   const [banners, setBanners] = useState<Banner[]>([])
   const [students, setStudents] = useState<Student[]>([])
-  const [online, setOnline] = useState(0)
-  const [totalVisits, setTotalVisits] = useState(0)
-  const realtimeRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  // Chart
+  // REALTIME PRESENCE — sebenar
+  const [online, setOnline] = useState(0)
+  const [onlineNames, setOnlineNames] = useState<string[]>([])
+  const presenceRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
+
   const [chartPts, setChartPts] = useState<number[]>(Array(20).fill(0))
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [logs, setLogs] = useState<{ msg: string; type: string; time: string }[]>([])
 
-  // Modals
   const [folderModal, setFolderModal] = useState<{ open: boolean; idx: number | null }>({ open: false, idx: null })
   const [linkModal, setLinkModal] = useState<{ open: boolean; folderIdx: number | null; linkIdx: number | null }>({ open: false, folderIdx: null, linkIdx: null })
   const [bannerModal, setBannerModal] = useState<{ open: boolean; idx: number | null }>({ open: false, idx: null })
   const [openFolder, setOpenFolder] = useState<Record<string, boolean>>({})
   const [toast, setToast] = useState<{ msg: string; type?: string } | null>(null)
 
-  // Form state
   const [fName, setFName] = useState(''); const [fImgData, setFImgData] = useState('')
   const [lName, setLName] = useState(''); const [lUrl, setLUrl] = useState(''); const [lImgData, setLImgData] = useState('')
   const [bTitle, setBTitle] = useState(''); const [bImgData, setBImgData] = useState(''); const [bLinkUrl, setBLinkUrl] = useState(''); const [bActive, setBActive] = useState(true)
 
+  const addLog = (msg: string, type: string) => {
+    const time = new Date().toLocaleTimeString('ms-MY', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    setLogs(prev => [{ msg, type, time }, ...prev].slice(0, 25))
+  }
+
   const login = () => {
-    if (pw === ADMIN_PW) { setAuthed(true); loadAll(); startSim() }
+    if (pw === ADMIN_PW) { setAuthed(true); loadAll(); startPresenceWatch() }
     else setPwErr('Kata laluan salah')
   }
 
@@ -54,31 +55,44 @@ export default function AdminPage() {
     setBanners(b || []); setStudents(s || [])
   }
 
-  const startSim = () => {
-    let cur = Math.floor(Math.random() * 5) + 1
-    setOnline(cur)
-    realtimeRef.current = setInterval(() => {
-      const roll = Math.random()
-      if (roll < 0.35 && cur < 50) {
-        cur++
-        setTotalVisits(v => v + 1)
-        const names = ['Murid A', 'Pelajar B', 'Pengguna C', 'Murid D', 'Pelajar E']
-        addLog(`${names[Math.floor(Math.random() * names.length)]} telah menyertai`, 'join')
-      } else if (roll > 0.72 && cur > 1) {
-        cur--
-        addLog('Seorang pengguna keluar', 'leave')
-      }
-      setOnline(cur)
-      setChartPts(prev => { const n = [...prev.slice(1), cur]; return n })
-    }, 3000)
+  // ── REALTIME PRESENCE SEBENAR ──
+  const startPresenceWatch = () => {
+    // Unsubscribe kalau ada channel lama
+    presenceRef.current?.unsubscribe()
+
+    const ch = supabase.channel('aedu_presence')
+
+    ch.on('presence', { event: 'sync' }, () => {
+      const state = ch.presenceState<{ full_name: string; user_id: string }>()
+      const users = Object.values(state).flat()
+      const count = users.length
+      const names = users.map(u => u.full_name)
+      setOnline(count)
+      setOnlineNames(names)
+      setChartPts(prev => [...prev.slice(1), count])
+    })
+
+    ch.on('presence', { event: 'join' }, ({ newPresences }) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      newPresences.forEach((p: any) => {
+        addLog(`${p.full_name || 'Pengguna'} telah menyertai`, 'join')
+      })
+    })
+
+    ch.on('presence', { event: 'leave' }, ({ leftPresences }) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      leftPresences.forEach((p: any) => {
+        addLog(`${p.full_name || 'Pengguna'} telah keluar`, 'leave')
+      })
+    })
+
+    ch.subscribe()
+    presenceRef.current = ch
   }
 
-  const addLog = (msg: string, type: string) => {
-    const time = new Date().toLocaleTimeString('ms-MY', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-    setLogs(prev => [{ msg, type, time }, ...prev].slice(0, 25))
-  }
-
-  useEffect(() => { return () => { if (realtimeRef.current) clearInterval(realtimeRef.current) } }, [])
+  useEffect(() => {
+    return () => { presenceRef.current?.unsubscribe() }
+  }, [])
 
   // Draw chart
   useEffect(() => {
@@ -109,13 +123,11 @@ export default function AdminPage() {
     setTimeout(() => setToast(null), 2600)
   }
 
-  // ── IMAGE UPLOAD ──
   const readImg = (file: File, cb: (d: string) => void) => {
     if (file.size > 3 * 1024 * 1024) return showToast('Fail terlalu besar (maks 3MB)', 'error')
     const r = new FileReader(); r.onload = e => cb(e.target!.result as string); r.readAsDataURL(file)
   }
 
-  // Upload to Supabase storage
   const uploadImg = async (dataUrl: string, bucket: string): Promise<string | null> => {
     const arr = dataUrl.split(','), mime = arr[0].match(/:(.*?);/)![1]
     const bstr = atob(arr[1]); const u8 = new Uint8Array(bstr.length)
@@ -124,17 +136,17 @@ export default function AdminPage() {
     const ext = mime.split('/')[1]
     const fname = `${Date.now()}.${ext}`
     const { error } = await supabase.storage.from(bucket).upload(fname, blob)
-    if (error) return null
+    if (error) { showToast('Gagal upload gambar: ' + error.message, 'error'); return null }
     const { data } = supabase.storage.from(bucket).getPublicUrl(fname)
     return data.publicUrl
   }
 
-  // ── FOLDER CRUD ──
+  // FOLDER CRUD
   const openAddFolder = () => { setFName(''); setFImgData(''); setFolderModal({ open: true, idx: null }) }
   const openEditFolder = (i: number) => { setFName(folders[i].name); setFImgData(folders[i].img_url || ''); setFolderModal({ open: true, idx: i }) }
   const saveFolder = async () => {
     if (!fName.trim()) return showToast('Masukkan nama folder', 'error')
-    let imgUrl = null
+    let imgUrl: string | null = null
     if (fImgData && fImgData.startsWith('data:')) imgUrl = await uploadImg(fImgData, 'images')
     else if (fImgData) imgUrl = fImgData
     if (folderModal.idx === null) {
@@ -153,10 +165,11 @@ export default function AdminPage() {
     showToast('Folder dipadam 🗑️'); loadAll()
   }
 
-  // ── LINK CRUD ──
+  // LINK CRUD
+  const folderLinks = (fi: number) => links.filter(l => l.folder_id === folders[fi].id)
   const openAddLink = (fi: number) => { setLName(''); setLUrl(''); setLImgData(''); setLinkModal({ open: true, folderIdx: fi, linkIdx: null }) }
   const openEditLink = (fi: number, li: number) => {
-    const lnk = links.filter(l => l.folder_id === folders[fi].id)[li]
+    const lnk = folderLinks(fi)[li]
     setLName(lnk.name); setLUrl(lnk.url); setLImgData(lnk.img_url || '')
     setLinkModal({ open: true, folderIdx: fi, linkIdx: li })
   }
@@ -164,33 +177,32 @@ export default function AdminPage() {
     if (!lName.trim()) return showToast('Masukkan nama pautan', 'error')
     if (!lUrl.trim()) return showToast('Masukkan URL', 'error')
     let url = lUrl.trim(); if (!/^https?:\/\//i.test(url)) url = 'https://' + url
-    let imgUrl = null
+    let imgUrl: string | null = null
     if (lImgData && lImgData.startsWith('data:')) imgUrl = await uploadImg(lImgData, 'images')
     else if (lImgData) imgUrl = lImgData
     const fi = linkModal.folderIdx!
     if (linkModal.linkIdx === null) {
-      const folderLinks = links.filter(l => l.folder_id === folders[fi].id)
-      await supabase.from('links').insert({ folder_id: folders[fi].id, name: lName.trim(), url, img_url: imgUrl, emoji: '🔗', order_num: folderLinks.length })
+      await supabase.from('links').insert({ folder_id: folders[fi].id, name: lName.trim(), url, img_url: imgUrl, emoji: '🔗', order_num: folderLinks(fi).length })
       showToast('Pautan ditambah! ✅', 'success')
     } else {
-      const lnk = links.filter(l => l.folder_id === folders[fi].id)[linkModal.linkIdx!]
+      const lnk = folderLinks(fi)[linkModal.linkIdx!]
       await supabase.from('links').update({ name: lName.trim(), url, img_url: imgUrl }).eq('id', lnk.id)
       showToast('Pautan dikemaskini! ✅', 'success')
     }
     setLinkModal({ open: false, folderIdx: null, linkIdx: null }); loadAll()
   }
   const deleteLink = async (fi: number, li: number) => {
-    const lnk = links.filter(l => l.folder_id === folders[fi].id)[li]
+    const lnk = folderLinks(fi)[li]
     if (!confirm(`Padam pautan "${lnk.name}"?`)) return
     await supabase.from('links').delete().eq('id', lnk.id)
     showToast('Pautan dipadam 🗑️'); loadAll()
   }
 
-  // ── BANNER CRUD ──
+  // BANNER CRUD
   const openAddBanner = () => { setBTitle(''); setBImgData(''); setBLinkUrl(''); setBActive(true); setBannerModal({ open: true, idx: null }) }
   const openEditBanner = (i: number) => { const b = banners[i]; setBTitle(b.title); setBImgData(b.img_url || ''); setBLinkUrl(b.link_url || ''); setBActive(b.active); setBannerModal({ open: true, idx: i }) }
   const saveBanner = async () => {
-    let imgUrl = null
+    let imgUrl: string | null = null
     if (bImgData && bImgData.startsWith('data:')) imgUrl = await uploadImg(bImgData, 'images')
     else if (bImgData) imgUrl = bImgData
     if (bannerModal.idx === null) {
@@ -208,7 +220,7 @@ export default function AdminPage() {
     showToast('Banner dipadam 🗑️'); loadAll()
   }
 
-  // ── LOGIN SCREEN ──
+  // LOGIN SCREEN
   if (!authed) return (
     <div style={S.loginPage}>
       <div style={S.loginCard}>
@@ -224,9 +236,7 @@ export default function AdminPage() {
     </div>
   )
 
-  // ── ADMIN PANEL ──
   const totalLinks = links.length
-  const folderLinks = (fi: number) => links.filter(l => l.folder_id === folders[fi].id)
 
   return (
     <div style={{ minHeight: '100vh', background: '#F1F5F9' }}>
@@ -234,7 +244,8 @@ export default function AdminPage() {
       <div style={S.topbar}>
         <span style={S.topbarBrand}>⚙️ AEdu Admin</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span className="live-dot" />
+          <span style={S.liveDot} />
+          <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.7)' }}>LANGSUNG</span>
           <a href="/" style={S.topbarExit}>Paparan Pelajar →</a>
         </div>
       </div>
@@ -250,36 +261,52 @@ export default function AdminPage() {
 
       <div style={S.main}>
 
-        {/* ── OVERVIEW ── */}
+        {/* OVERVIEW */}
         {tab === 'overview' && (
           <>
             <div style={S.statsGrid}>
-              {[
-                { label: '🟢 Dalam Talian', val: online, live: true },
-                { label: '👥 Jumlah Murid', val: students.length, live: false },
-                { label: '📁 Folder', val: folders.length, live: false },
-                { label: '🔗 Pautan', val: totalLinks, live: false },
-              ].map(s => (
-                <div key={s.label} style={S.statCard}>
-                  <div style={S.statLabel}>{s.label}</div>
-                  <div style={S.statVal}>
-                    {s.val} {s.live && <span className="live-dot" style={{ marginLeft: 6 }} />}
-                  </div>
+              <div style={S.statCard}>
+                <div style={S.statLabel}>🟢 Dalam Talian Sekarang</div>
+                <div style={S.statVal}>
+                  {online}
+                  <span style={S.liveDot} />
                 </div>
-              ))}
+                {onlineNames.length > 0 && (
+                  <div style={{ fontSize: 11, color: '#64748B', marginTop: 6 }}>
+                    {onlineNames.slice(0, 3).join(', ')}{onlineNames.length > 3 ? ` +${onlineNames.length - 3} lagi` : ''}
+                  </div>
+                )}
+              </div>
+              <div style={S.statCard}>
+                <div style={S.statLabel}>👥 Jumlah Murid Berdaftar</div>
+                <div style={S.statVal}>{students.length}</div>
+              </div>
+              <div style={S.statCard}>
+                <div style={S.statLabel}>📁 Folder</div>
+                <div style={S.statVal}>{folders.length}</div>
+              </div>
+              <div style={S.statCard}>
+                <div style={S.statLabel}>🔗 Pautan</div>
+                <div style={S.statVal}>{totalLinks}</div>
+              </div>
             </div>
 
             <div style={S.section}>
-              <div style={S.sectionHdr}><h3 style={S.sectionTitle}>📈 Graf Langsung</h3></div>
+              <div style={S.sectionHdr}>
+                <h3 style={S.sectionTitle}>📈 Graf Pengguna Dalam Talian</h3>
+                <span style={{ fontSize: 11, color: '#10B981', display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <span style={S.liveDot} /> Data sebenar
+                </span>
+              </div>
               <div style={{ padding: '14px 16px 8px' }}>
                 <canvas ref={canvasRef} style={{ width: '100%', height: 70 }} />
               </div>
-              <div style={{ padding: '0 12px 12px', maxHeight: 180, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 5 }}>
+              <div style={{ padding: '0 12px 12px', maxHeight: 200, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 5 }}>
                 {logs.length === 0
-                  ? <p style={{ color: '#94A3B8', fontSize: 12, textAlign: 'center', padding: 20 }}>Log akan muncul di sini...</p>
+                  ? <p style={{ color: '#94A3B8', fontSize: 12, textAlign: 'center', padding: 20 }}>Menunggu aktiviti pengguna...</p>
                   : logs.map((l, i) => (
                     <div key={i} style={S.logEntry}>
-                      <span style={{ width: 6, height: 6, borderRadius: '50%', background: l.type === 'join' ? '#10B981' : '#EF4444', flexShrink: 0 }} />
+                      <span style={{ width: 6, height: 6, borderRadius: '50%', background: l.type === 'join' ? '#10B981' : '#EF4444', flexShrink: 0, display: 'inline-block' }} />
                       <span style={{ flex: 1, fontSize: 11 }}>{l.msg}</span>
                       <span style={{ fontSize: 10, color: '#94A3B8' }}>{l.time}</span>
                     </div>
@@ -289,7 +316,7 @@ export default function AdminPage() {
           </>
         )}
 
-        {/* ── FOLDERS ── */}
+        {/* FOLDERS */}
         {tab === 'folders' && (
           <div style={S.section}>
             <div style={S.sectionHdr}>
@@ -339,7 +366,7 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* ── BANNERS ── */}
+        {/* BANNERS */}
         {tab === 'banners' && (
           <div style={S.section}>
             <div style={S.sectionHdr}>
@@ -348,7 +375,7 @@ export default function AdminPage() {
             </div>
             <div style={{ padding: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
               {banners.length === 0
-                ? <p style={{ textAlign: 'center', color: '#94A3B8', padding: 30, fontSize: 13 }}>Tiada banner lagi. Banner dipaparkan sebagai galeri bergerak pada paparan murid.</p>
+                ? <p style={{ textAlign: 'center', color: '#94A3B8', padding: 30, fontSize: 13 }}>Tiada banner. Banner dipaparkan sebagai galeri bergerak kepada murid.</p>
                 : banners.map((b, i) => (
                   <div key={b.id} style={{ ...S.linkRow, padding: 10, borderRadius: 10, border: '1px solid #E2E8F0', background: 'white' }}>
                     <div style={{ ...S.linkThumb, width: 56, height: 42, borderRadius: 8 }}>
@@ -368,7 +395,7 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* ── STUDENTS ── */}
+        {/* STUDENTS */}
         {tab === 'students' && (
           <div style={S.section}>
             <div style={S.sectionHdr}><h3 style={S.sectionTitle}>👥 Senarai Murid ({students.length})</h3></div>
@@ -377,9 +404,7 @@ export default function AdminPage() {
                 ? <p style={{ textAlign: 'center', color: '#94A3B8', padding: 30, fontSize: 13 }}>Tiada murid berdaftar lagi</p>
                 : students.map((s, i) => (
                   <div key={s.id} style={{ ...S.linkRow, padding: '10px 12px', borderRadius: 10, border: '1px solid #E2E8F0', background: 'white' }}>
-                    <div style={{ width: 32, height: 32, borderRadius: 8, background: '#EEF2FF', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700, color: '#4F46E5', flexShrink: 0 }}>
-                      {i + 1}
-                    </div>
+                    <div style={{ width: 32, height: 32, borderRadius: 8, background: '#EEF2FF', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, color: '#4F46E5', flexShrink: 0 }}>{i + 1}</div>
                     <div style={{ flex: 1 }}>
                       <div style={{ fontSize: 13, fontWeight: 700 }}>{s.full_name}</div>
                       <div style={{ fontSize: 11, color: '#94A3B8' }}>📞 {s.parent_phone}</div>
@@ -392,37 +417,28 @@ export default function AdminPage() {
         )}
       </div>
 
-      {/* ── MODALS ── */}
-      {/* Folder Modal */}
+      {/* MODALS */}
       {folderModal.open && (
         <Modal title={folderModal.idx === null ? '➕ Tambah Folder' : '✏️ Edit Folder'} onClose={() => setFolderModal({ open: false, idx: null })}>
           <FG label="Nama Folder"><input style={S.inp} placeholder="cth: Tahun 1..." value={fName} onChange={e => setFName(e.target.value)} /></FG>
-          <FG label="Gambar Folder">
-            <ImgUpload dataUrl={fImgData} onChange={setFImgData} onRead={readImg} />
-          </FG>
+          <FG label="Gambar Folder"><ImgUpload dataUrl={fImgData} onChange={setFImgData} onRead={readImg} /></FG>
           <ModalBtns onCancel={() => setFolderModal({ open: false, idx: null })} onSave={saveFolder} />
         </Modal>
       )}
 
-      {/* Link Modal */}
       {linkModal.open && (
         <Modal title={linkModal.linkIdx === null ? `➕ Pautan — ${folders[linkModal.folderIdx!]?.name}` : '✏️ Edit Pautan'} onClose={() => setLinkModal({ open: false, folderIdx: null, linkIdx: null })}>
           <FG label="Nama Pautan"><input style={S.inp} placeholder="cth: Kuiz Matematik..." value={lName} onChange={e => setLName(e.target.value)} /></FG>
           <FG label="URL"><input style={S.inp} placeholder="https://..." value={lUrl} onChange={e => setLUrl(e.target.value)} type="url" /></FG>
-          <FG label="Gambar Pautan">
-            <ImgUpload dataUrl={lImgData} onChange={setLImgData} onRead={readImg} />
-          </FG>
+          <FG label="Gambar Pautan"><ImgUpload dataUrl={lImgData} onChange={setLImgData} onRead={readImg} /></FG>
           <ModalBtns onCancel={() => setLinkModal({ open: false, folderIdx: null, linkIdx: null })} onSave={saveLink} />
         </Modal>
       )}
 
-      {/* Banner Modal */}
       {bannerModal.open && (
         <Modal title={bannerModal.idx === null ? '➕ Tambah Banner' : '✏️ Edit Banner'} onClose={() => setBannerModal({ open: false, idx: null })}>
           <FG label="Tajuk Banner (pilihan)"><input style={S.inp} placeholder="cth: Aktiviti Minggu Ini..." value={bTitle} onChange={e => setBTitle(e.target.value)} /></FG>
-          <FG label="Gambar Banner">
-            <ImgUpload dataUrl={bImgData} onChange={setBImgData} onRead={readImg} />
-          </FG>
+          <FG label="Gambar Banner"><ImgUpload dataUrl={bImgData} onChange={setBImgData} onRead={readImg} /></FG>
           <FG label="URL Pautan (klik banner — pilihan)"><input style={S.inp} placeholder="https://..." value={bLinkUrl} onChange={e => setBLinkUrl(e.target.value)} /></FG>
           <FG label="Status">
             <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
@@ -434,7 +450,6 @@ export default function AdminPage() {
         </Modal>
       )}
 
-      {/* Toast */}
       {toast && (
         <div style={{ ...S.toast, background: toast.type === 'success' ? '#10B981' : toast.type === 'error' ? '#EF4444' : '#0F172A' }}>
           {toast.msg}
@@ -444,10 +459,10 @@ export default function AdminPage() {
   )
 }
 
-// ── Sub-components ──
 function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200, padding: 16 }} onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200, padding: 16 }}
+      onClick={e => { if (e.target === e.currentTarget) onClose() }}>
       <div style={{ background: 'white', borderRadius: 20, padding: '24px 20px', width: '100%', maxWidth: 440, maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 24px 64px rgba(0,0,0,0.2)' }}>
         <h3 style={{ fontFamily: "'Plus Jakarta Sans',sans-serif", fontSize: 17, fontWeight: 800, marginBottom: 18 }}>{title}</h3>
         {children}
@@ -463,11 +478,13 @@ function FG({ label, children }: { label: string; children: React.ReactNode }) {
 function ImgUpload({ dataUrl, onChange, onRead }: { dataUrl: string; onChange: (v: string) => void; onRead: (f: File, cb: (d: string) => void) => void }) {
   const ref = useRef<HTMLInputElement>(null)
   return (
-    <div style={{ border: '2px dashed #E2E8F0', borderRadius: 10, overflow: 'hidden', cursor: 'pointer', minHeight: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#F8FAFC', position: 'relative' }} onClick={() => ref.current?.click()}>
+    <div style={{ border: '2px dashed #E2E8F0', borderRadius: 10, overflow: 'hidden', cursor: 'pointer', minHeight: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#F8FAFC', position: 'relative' }}
+      onClick={() => ref.current?.click()}>
       {dataUrl
         ? <>
           <img src={dataUrl} alt="" style={{ width: '100%', height: 120, objectFit: 'cover', display: 'block' }} />
-          <button style={{ position: 'absolute', top: 6, right: 6, width: 26, height: 26, borderRadius: '50%', background: 'rgba(0,0,0,0.5)', color: 'white', border: 'none', cursor: 'pointer', fontSize: 12 }} onClick={e => { e.stopPropagation(); onChange('') }}>✕</button>
+          <button style={{ position: 'absolute', top: 6, right: 6, width: 26, height: 26, borderRadius: '50%', background: 'rgba(0,0,0,0.5)', color: 'white', border: 'none', cursor: 'pointer', fontSize: 12 }}
+            onClick={e => { e.stopPropagation(); onChange('') }}>✕</button>
         </>
         : <div style={{ textAlign: 'center', padding: 20, color: '#94A3B8' }}><div style={{ fontSize: 28, marginBottom: 6 }}>🖼️</div><div style={{ fontSize: 12 }}>Ketik untuk muat naik gambar</div><div style={{ fontSize: 10, marginTop: 3 }}>PNG · JPG (maks 3MB)</div></div>}
       <input ref={ref} type="file" accept="image/*" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) onRead(f, onChange) }} />
@@ -496,6 +513,7 @@ const S: Record<string, React.CSSProperties> = {
   topbar: { background: '#1e1b4b', padding: '0 16px', height: 52, display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 100 },
   topbarBrand: { fontFamily: "'Plus Jakarta Sans',sans-serif", fontWeight: 800, fontSize: 16, color: 'white' },
   topbarExit: { fontSize: 12, color: 'rgba(255,255,255,0.7)', textDecoration: 'none', padding: '6px 12px', background: 'rgba(255,255,255,0.1)', borderRadius: 7, border: '1px solid rgba(255,255,255,0.15)' },
+  liveDot: { display: 'inline-block', width: 7, height: 7, background: '#10B981', borderRadius: '50%', marginLeft: 6 },
   tabBar: { background: 'white', borderBottom: '1px solid #E2E8F0', padding: '0 12px', display: 'flex', gap: 0, overflowX: 'auto' },
   tabBtn: { padding: '12px 14px', border: 'none', background: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', color: '#64748B', whiteSpace: 'nowrap', borderBottom: '2px solid transparent' },
   tabActive: { color: '#4F46E5', borderBottom: '2px solid #4F46E5' },

@@ -2,7 +2,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { supabase, type Folder, type Link, type Banner, type Student } from '@/lib/supabase'
 
-type Tab = 'overview' | 'folders' | 'banners' | 'students' | 'subscription' | 'payment'
+type Tab = 'overview' | 'apps' | 'banners' | 'students' | 'subscription' | 'payment'
 const ADMIN_PW = '050505'
 
 // Lucide-style SVG icons (inline, no dependency)
@@ -29,7 +29,6 @@ export default function AdminPage() {
   const [pw, setPw] = useState('')
   const [pwErr, setPwErr] = useState('')
   const [tab, setTab] = useState<Tab>('overview')
-  const [folders, setFolders] = useState<Folder[]>([])
   const [links, setLinks] = useState<Link[]>([])
   const [banners, setBanners] = useState<Banner[]>([])
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -51,16 +50,13 @@ export default function AdminPage() {
   const [logs, setLogs] = useState<{ msg: string; type: string; time: string }[]>([])
 
   // Modals
-  const [folderModal, setFolderModal] = useState<{ open: boolean; idx: number | null }>({ open: false, idx: null })
-  const [linkModal, setLinkModal] = useState<{ open: boolean; folderIdx: number | null; linkIdx: number | null }>({ open: false, folderIdx: null, linkIdx: null })
+  const [linkModal, setLinkModal] = useState<{ open: boolean; folderIdx: number | null; linkIdx: string | null }>({ open: false, folderIdx: null, linkIdx: null })
   const [bannerModal, setBannerModal] = useState<{ open: boolean; idx: number | null }>({ open: false, idx: null })
   const [addStudentModal, setAddStudentModal] = useState(false)
-  const [openFolder, setOpenFolder] = useState<Record<string, boolean>>({})
   const [toast, setToast] = useState<{ msg: string; type?: string } | null>(null)
   const [subSearch, setSubSearch] = useState('')
 
   // Forms
-  const [fName, setFName] = useState(''); const [fImgData, setFImgData] = useState('')
   const [lName, setLName] = useState(''); const [lUrl, setLUrl] = useState(''); const [lImgData, setLImgData] = useState(''); const [lContentType, setLContentType] = useState<'url'|'html'>('url'); const [lHtmlContent, setLHtmlContent] = useState(''); const [lTags, setLTags] = useState<string[]>([])
   const [bTitle, setBTitle] = useState(''); const [bImgData, setBImgData] = useState(''); const [bLinkUrl, setBLinkUrl] = useState(''); const [bActive, setBActive] = useState(true)
   const [newStudentName, setNewStudentName] = useState(''); const [newStudentPhone, setNewStudentPhone] = useState(''); const [newStudentNote, setNewStudentNote] = useState('')
@@ -76,14 +72,13 @@ export default function AdminPage() {
   }
 
   const loadAll = async () => {
-    const [{ data: f }, { data: l }, { data: b }, { data: s }, { data: settings }] = await Promise.all([
-      supabase.from('folders').select('*').order('order_num'),
+    const [{ data: l }, { data: b }, { data: s }, { data: settings }] = await Promise.all([
       supabase.from('links').select('*').order('order_num'),
       supabase.from('banners').select('*').order('order_num'),
       supabase.from('students').select('*').order('created_at', { ascending: false }),
       supabase.from('app_settings').select('*').eq('key', 'payment_required').single(),
     ])
-    setFolders(f || []); setLinks(l || [])
+    setLinks(l || [])
     setBanners(b || []); setStudents(s || [])
     setPaymentRequired(settings?.value === 'true')
     {
@@ -231,41 +226,21 @@ export default function AdminPage() {
     return supabase.storage.from('images').getPublicUrl(fname).data.publicUrl
   }
 
-  const folderLinks = (fi: number) => links.filter(l => l.folder_id === folders[fi].id)
 
-  const openAddFolder = () => { setFName(''); setFImgData(''); setFolderModal({ open: true, idx: null }) }
-  const openEditFolder = (i: number) => { setFName(folders[i].name); setFImgData(folders[i].img_url || ''); setFolderModal({ open: true, idx: i }) }
-  const saveFolder = async () => {
-    if (!fName.trim()) return showToast('Masukkan nama folder', 'error')
-    let imgUrl: string | null = null
-    if (fImgData?.startsWith('data:')) imgUrl = await uploadImg(fImgData)
-    else if (fImgData) imgUrl = fImgData
-    if (folderModal.idx === null) {
-      await supabase.from('folders').insert({ name: fName.trim(), img_url: imgUrl, emoji: '📁', order_num: folders.length })
-      showToast('Folder ditambah!', 'success')
-    } else {
-      await supabase.from('folders').update({ name: fName.trim(), img_url: imgUrl }).eq('id', folders[folderModal.idx].id)
-      showToast('Folder dikemaskini!', 'success')
-    }
-    setFolderModal({ open: false, idx: null }); loadAll()
-  }
-  const deleteFolder = async (i: number) => {
-    if (!confirm(`Padam folder "${folders[i].name}"?`)) return
-    await supabase.from('links').delete().eq('folder_id', folders[i].id)
-    await supabase.from('folders').delete().eq('id', folders[i].id)
-    showToast('Folder dipadam'); loadAll()
-  }
 
-  const openAddLink = (fi: number) => { setLName(''); setLUrl(''); setLImgData(''); setLContentType('url'); setLHtmlContent(''); setLTags([]); setLinkModal({ open: true, folderIdx: fi, linkIdx: null }) }
-  const openEditLink = (fi: number, li: number) => {
+
+
+  const openAddLink = () => { setLName(''); setLUrl(''); setLImgData(''); setLContentType('url'); setLHtmlContent(''); setLTags([]); setLinkModal({ open: true, folderIdx: null, linkIdx: null }) }
+  const openEditLink = (linkId: string) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const lnk = folderLinks(fi)[li] as any
+    const lnk = links.find((l: any) => l.id === linkId) as any
+    if (!lnk) return
     setLName(lnk.name); setLUrl(lnk.url || ''); setLImgData(lnk.img_url || '')
     setLContentType(lnk.content_type || 'url'); setLHtmlContent(lnk.html_content || ''); setLTags(lnk.tags || [])
-    setLinkModal({ open: true, folderIdx: fi, linkIdx: li })
+    setLinkModal({ open: true, folderIdx: null, linkIdx: linkId })
   }
   const saveLink = async () => {
-    if (!lName.trim()) return showToast('Masukkan nama pautan', 'error')
+    if (!lName.trim()) return showToast('Masukkan nama aktiviti', 'error')
     if (lContentType === 'url' && !lUrl.trim()) return showToast('Masukkan URL', 'error')
     if (lContentType === 'html' && !lHtmlContent.trim()) return showToast('Paste kod HTML', 'error')
     let url = lUrl.trim()
@@ -273,33 +248,32 @@ export default function AdminPage() {
     let imgUrl: string | null = null
     if (lImgData?.startsWith('data:')) imgUrl = await uploadImg(lImgData)
     else if (lImgData) imgUrl = lImgData
-    const fi = linkModal.folderIdx!
-    const payload = {
-      folder_id: folders[fi].id,
-      name: lName.trim(),
-      url: lContentType === 'url' ? url : null,
-      html_content: lContentType === 'html' ? lHtmlContent.trim() : null,
-      content_type: lContentType,
-      img_url: imgUrl,
-      emoji: lContentType === 'html' ? '🎮' : '🔗',
-      tags: lTags,
-      order_num: folderLinks(fi).length
-    }
-    if (linkModal.linkIdx === null) {
-      await supabase.from('links').insert(payload)
+    const isEdit = linkModal.linkIdx !== null
+    if (!isEdit) {
+      await supabase.from('links').insert({
+        folder_id: null, name: lName.trim(),
+        url: lContentType === 'url' ? url : null,
+        html_content: lContentType === 'html' ? lHtmlContent.trim() : null,
+        content_type: lContentType, img_url: imgUrl,
+        emoji: lContentType === 'html' ? '🎮' : '🔗',
+        tags: lTags, order_num: links.length
+      })
       showToast('Aktiviti ditambah!', 'success')
     } else {
-      const lnk = folderLinks(fi)[linkModal.linkIdx!]
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { folder_id, order_num, ...updatePayload } = payload
-      await supabase.from('links').update(updatePayload).eq('id', lnk.id)
+      await supabase.from('links').update({
+        name: lName.trim(),
+        url: lContentType === 'url' ? url : null,
+        html_content: lContentType === 'html' ? lHtmlContent.trim() : null,
+        content_type: lContentType, img_url: imgUrl,
+        emoji: lContentType === 'html' ? '🎮' : '🔗', tags: lTags
+      }).eq('id', linkModal.linkIdx as string)
       showToast('Aktiviti dikemaskini!', 'success')
     }
     setLinkModal({ open: false, folderIdx: null, linkIdx: null }); loadAll()
   }
-  const deleteLink = async (fi: number, li: number) => {
-    const lnk = folderLinks(fi)[li]; if (!confirm(`Padam "${lnk.name}"?`)) return
-    await supabase.from('links').delete().eq('id', lnk.id); showToast('Pautan dipadam'); loadAll()
+  const deleteLink = async (linkId: string, name: string) => {
+    if (!confirm(`Padam "${name}"?`)) return
+    await supabase.from('links').delete().eq('id', linkId); showToast('Aktiviti dipadam'); loadAll()
   }
 
   const openAddBanner = () => { setBTitle(''); setBImgData(''); setBLinkUrl(''); setBActive(true); setBannerModal({ open: true, idx: null }) }
@@ -363,7 +337,7 @@ export default function AdminPage() {
 
   const tabConfig: { key: Tab; label: string; icon: React.ReactNode }[] = [
     { key: 'overview', label: 'Overview', icon: Icons.overview },
-    { key: 'folders', label: 'Folder', icon: Icons.folders },
+    { key: 'apps', label: 'Aktiviti', icon: Icons.link },
     { key: 'banners', label: 'Banner', icon: Icons.banners },
     { key: 'students', label: 'Murid', icon: Icons.students },
     { key: 'subscription', label: 'Langganan', icon: Icons.subscription },
@@ -485,7 +459,7 @@ export default function AdminPage() {
                 { label: 'Dalam Talian', val: online, sub: 'pengguna aktif', color: '#6366F1', bg: '#EEF2FF', live: true },
                 { label: 'Murid Daftar', val: students.length, sub: 'jumlah keseluruhan', color: '#0EA5E9', bg: '#E0F2FE', live: false },
                 { label: 'Akses Aktif', val: subscribedCount, sub: paymentRequired ? 'mod berbayar' : 'mod percuma', color: '#10B981', bg: '#ECFDF5', live: false },
-                { label: 'Pautan', val: links.length, sub: `dalam ${folders.length} folder`, color: '#F59E0B', bg: '#FFFBEB', live: false },
+                { label: 'Aktiviti', val: links.length, sub: 'jumlah aktiviti', color: '#F59E0B', bg: '#FFFBEB', live: false },
               ].map(s => (
                 <div key={s.label} className="stat-card" style={{ background: 'white', borderRadius: 16, padding: '18px', border: '1px solid #F1F5F9', boxShadow: '0 2px 8px rgba(0,0,0,0.05)', transition: 'all 0.2s' }}>
                   <div style={{ fontSize: 11, color: '#94A3B8', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>{s.label}</div>
@@ -540,46 +514,37 @@ export default function AdminPage() {
           </>
         )}
 
-        {/* FOLDERS */}
-        {tab === 'folders' && (
-          <Section title="Folder & Pautan" action={<BtnAdd onClick={openAddFolder}>{Icons.plus} Folder</BtnAdd>}>
-            {folders.length === 0
-              ? <Empty msg="Tiada folder lagi" />
-              : folders.map((f, fi) => (
-                <div key={f.id} style={{ border: '1px solid #E2E8F0', borderRadius: 12, overflow: 'hidden', marginBottom: 8 }}>
-                  <div className="folder-row" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', background: '#FAFAFA', cursor: 'pointer', transition: 'background 0.15s' }}
-                    onClick={() => setOpenFolder(p => ({ ...p, [f.id]: !p[f.id] }))}>
-                    <Thumb img={f.img_url} emoji={f.emoji} size={40} radius={10} />
-                    <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: '#0F172A' }}>{f.name}</span>
-                    <span style={{ fontSize: 11, color: '#94A3B8', marginRight: 4 }}>{folderLinks(fi).length} pautan</span>
-                    <div style={{ display: 'flex', gap: 4 }} onClick={e => e.stopPropagation()}>
-                      <IconBtn color="#EEF2FF" textColor="#4F46E5" onClick={() => openEditFolder(fi)}>{Icons.edit}</IconBtn>
-                      <IconBtn color="#FEF2F2" textColor="#EF4444" onClick={() => deleteFolder(fi)}>{Icons.trash}</IconBtn>
-                    </div>
-                    <span style={{ color: '#CBD5E1', display: 'flex', marginLeft: 4 }}>{Icons.chevron(!!openFolder[f.id])}</span>
-                  </div>
-                  {openFolder[f.id] && (
-                    <div style={{ padding: '10px 12px', background: 'white', borderTop: '1px solid #F1F5F9', display: 'flex', flexDirection: 'column', gap: 6 }}>
-                      {folderLinks(fi).map((l, li) => (
-                        <div key={l.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 8, background: '#F8FAFC', border: '1px solid #F1F5F9' }}>
-                          <Thumb img={l.img_url} emoji={l.emoji} size={34} radius={8} />
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontSize: 12, fontWeight: 600, color: '#0F172A' }}>{l.name}</div>
-                            <div style={{ fontSize: 10, color: '#94A3B8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.url}</div>
-                          </div>
-                          <div style={{ display: 'flex', gap: 4 }}>
-                            <IconBtn color="#EEF2FF" textColor="#4F46E5" onClick={() => openEditLink(fi, li)}>{Icons.edit}</IconBtn>
-                            <IconBtn color="#FEF2F2" textColor="#EF4444" onClick={() => deleteLink(fi, li)}>{Icons.trash}</IconBtn>
+        {/* APPS / AKTIVITI */}
+        {tab === 'apps' && (
+          <Section title={`Semua Aktiviti (${links.length})`} action={<BtnAdd onClick={openAddLink}>{Icons.plus} Tambah Aktiviti</BtnAdd>}>
+            {links.length === 0
+              ? <Empty msg="Tiada aktiviti lagi. Tambah aktiviti pertama!" />
+              : <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {(links as any[]).map((l: any) => {
+                    const tags: string[] = l.tags || []
+                    return (
+                      <div key={l.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 12, border: '1px solid #E2E8F0', background: 'white' }}>
+                        <Thumb img={l.img_url} emoji={l.content_type === 'html' ? '🎮' : '🔗'} size={44} radius={12} />
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 13, fontWeight: 700, color: '#0F172A', marginBottom: 4 }}>{l.name}</div>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
+                            <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 20, background: l.content_type === 'html' ? '#EEF2FF' : '#F0FDF4', color: l.content_type === 'html' ? '#4F46E5' : '#10B981', border: `1px solid ${l.content_type === 'html' ? '#C7D2FE' : '#BBF7D0'}` }}>
+                              {l.content_type === 'html' ? 'HTML' : 'LINK'}
+                            </span>
+                            {tags.map((tag: string) => (
+                              <span key={tag} style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: '#F1F5F9', color: '#64748B', border: '1px solid #E2E8F0' }}>{tag}</span>
+                            ))}
+                            {l.url && <span style={{ fontSize: 10, color: '#94A3B8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 180 }}>{l.url}</span>}
                           </div>
                         </div>
-                      ))}
-                      <button onClick={() => openAddLink(fi)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 12px', background: 'white', border: '1.5px dashed #C7D2FE', borderRadius: 8, color: '#6366F1', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
-                        {Icons.plus} Tambah Pautan
-                      </button>
-                    </div>
-                  )}
-                </div>
-              ))}
+                        <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                          <IconBtn color="#EEF2FF" textColor="#4F46E5" onClick={() => openEditLink(l.id)}>{Icons.edit}</IconBtn>
+                          <IconBtn color="#FEF2F2" textColor="#EF4444" onClick={() => deleteLink(l.id, l.name)}>{Icons.trash}</IconBtn>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>}
           </Section>
         )}
 
@@ -775,15 +740,9 @@ export default function AdminPage() {
       </div>
 
       {/* MODALS */}
-      {folderModal.open && (
-        <Modal title={folderModal.idx === null ? 'Tambah Folder' : 'Edit Folder'} onClose={() => setFolderModal({ open: false, idx: null })}>
-          <FG label="Nama Folder"><input style={inpStyle} placeholder="cth: Tahun 1..." value={fName} onChange={e => setFName(e.target.value)} /></FG>
-          <FG label="Gambar Folder"><ImgUpload dataUrl={fImgData} onChange={setFImgData} onRead={readImg} /></FG>
-          <ModalBtns onCancel={() => setFolderModal({ open: false, idx: null })} onSave={saveFolder} />
-        </Modal>
-      )}
+
       {linkModal.open && (
-        <Modal title={linkModal.linkIdx === null ? `Tambah Aktiviti — ${folders[linkModal.folderIdx!]?.name}` : 'Edit Aktiviti'} onClose={() => setLinkModal({ open: false, folderIdx: null, linkIdx: null })}>
+        <Modal title={linkModal.linkIdx === null ? 'Tambah Aktiviti Baru' : 'Edit Aktiviti'} onClose={() => setLinkModal({ open: false, folderIdx: null, linkIdx: null })}>
           <FG label="Nama Aktiviti"><input style={inpStyle} placeholder="cth: Kuiz Matematik, Games Sains..." value={lName} onChange={e => setLName(e.target.value)} /></FG>
 
           {/* Toggle URL / HTML */}

@@ -61,7 +61,7 @@ export default function AdminPage() {
 
   // Forms
   const [fName, setFName] = useState(''); const [fImgData, setFImgData] = useState('')
-  const [lName, setLName] = useState(''); const [lUrl, setLUrl] = useState(''); const [lImgData, setLImgData] = useState(''); const [lContentType, setLContentType] = useState<'url'|'html'>('url'); const [lHtmlContent, setLHtmlContent] = useState('')
+  const [lName, setLName] = useState(''); const [lUrl, setLUrl] = useState(''); const [lImgData, setLImgData] = useState(''); const [lContentType, setLContentType] = useState<'url'|'html'>('url'); const [lHtmlContent, setLHtmlContent] = useState(''); const [lTags, setLTags] = useState<string[]>([])
   const [bTitle, setBTitle] = useState(''); const [bImgData, setBImgData] = useState(''); const [bLinkUrl, setBLinkUrl] = useState(''); const [bActive, setBActive] = useState(true)
   const [newStudentName, setNewStudentName] = useState(''); const [newStudentPhone, setNewStudentPhone] = useState(''); const [newStudentNote, setNewStudentNote] = useState('')
 
@@ -256,12 +256,12 @@ export default function AdminPage() {
     showToast('Folder dipadam'); loadAll()
   }
 
-  const openAddLink = (fi: number) => { setLName(''); setLUrl(''); setLImgData(''); setLContentType('url'); setLHtmlContent(''); setLinkModal({ open: true, folderIdx: fi, linkIdx: null }) }
+  const openAddLink = (fi: number) => { setLName(''); setLUrl(''); setLImgData(''); setLContentType('url'); setLHtmlContent(''); setLTags([]); setLinkModal({ open: true, folderIdx: fi, linkIdx: null }) }
   const openEditLink = (fi: number, li: number) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const lnk = folderLinks(fi)[li] as any
     setLName(lnk.name); setLUrl(lnk.url || ''); setLImgData(lnk.img_url || '')
-    setLContentType(lnk.content_type || 'url'); setLHtmlContent(lnk.html_content || '')
+    setLContentType(lnk.content_type || 'url'); setLHtmlContent(lnk.html_content || ''); setLTags(lnk.tags || [])
     setLinkModal({ open: true, folderIdx: fi, linkIdx: li })
   }
   const saveLink = async () => {
@@ -282,6 +282,7 @@ export default function AdminPage() {
       content_type: lContentType,
       img_url: imgUrl,
       emoji: lContentType === 'html' ? '🎮' : '🔗',
+      tags: lTags,
       order_num: folderLinks(fi).length
     }
     if (linkModal.linkIdx === null) {
@@ -848,6 +849,20 @@ export default function AdminPage() {
             </FG>
           )}
 
+          <FG label="Tag / Tahun">
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+              {['Tahun 1','Tahun 2','Tahun 3','Tahun 4','Tahun 5','Tahun 6','Matematik','Sains','Bahasa'].map(tag => {
+                const active = lTags.includes(tag)
+                return (
+                  <button key={tag} type="button" onClick={() => setLTags(prev => active ? prev.filter(t => t !== tag) : [...prev, tag])}
+                    style={{ padding: '6px 14px', borderRadius: 20, border: `2px solid ${active ? '#4F46E5' : '#E2E8F0'}`, background: active ? '#4F46E5' : 'white', color: active ? 'white' : '#64748B', fontSize: 12, fontWeight: 700, cursor: 'pointer', transition: 'all 0.15s' }}>
+                    {tag}
+                  </button>
+                )
+              })}
+            </div>
+            <p style={{ fontSize: 11, color: '#94A3B8' }}>Pilih satu atau lebih tag. Murid boleh filter mengikut tag ini.</p>
+          </FG>
           <FG label="Gambar Ikon (pilihan)"><ImgUpload dataUrl={lImgData} onChange={setLImgData} onRead={readImg} /></FG>
           <ModalBtns onCancel={() => setLinkModal({ open: false, folderIdx: null, linkIdx: null })} onSave={saveLink} />
         </Modal>

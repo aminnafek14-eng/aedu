@@ -99,9 +99,15 @@ export default function FolderPage() {
       </div>
 
       <style>{`
-        .apps-grid { grid-template-columns: repeat(2, 1fr) !important; }
-        @media (min-width: 600px) { .apps-grid { grid-template-columns: repeat(3, 1fr) !important; } }
-        @media (min-width: 900px) { .apps-grid { grid-template-columns: repeat(4, 1fr) !important; } }
+        .apps-grid { grid-template-columns: repeat(2, 1fr) !important; gap: 14px !important; }
+        @media (min-width: 600px) {
+          .apps-grid { grid-template-columns: repeat(4, 1fr) !important; gap: 16px !important; }
+          .app-icon-wrap { max-height: 140px !important; }
+        }
+        @media (min-width: 900px) {
+          .apps-grid { grid-template-columns: repeat(5, 1fr) !important; gap: 18px !important; }
+          .app-icon-wrap { max-height: 140px !important; }
+        }
       `}</style>
       {/* Apps grid */}
       <div style={S.content}>
@@ -194,7 +200,7 @@ const S: Record<string, React.CSSProperties> = {
   gridLabel: { fontSize: 12, fontWeight: 700, color: '#6366F1', marginBottom: 14, textTransform: 'uppercase', letterSpacing: '0.05em' },
   appsGrid: { display: 'grid', gap: '14px 12px' },
   appItem: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, cursor: 'pointer', WebkitTapHighlightColor: 'transparent', width: '100%' },
-  appIcon: { width: '100%', aspectRatio: '1/1', borderRadius: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', transition: 'transform 0.15s', flexShrink: 0, position: 'relative' },
+  appIcon: { width: '100%', aspectRatio: '1/1', borderRadius: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', transition: 'transform 0.15s', flexShrink: 0, position: 'relative', maxHeight: 160 },
   appIconImg: { width: '100%', height: '100%', objectFit: 'cover', display: 'block' },
   appEmoji: { fontSize: 60, lineHeight: 1 },
   appName: { fontSize: 14, fontWeight: 700, color: '#1E293B', textAlign: 'center', lineHeight: 1.3, wordBreak: 'break-word', maxWidth: '100%' },

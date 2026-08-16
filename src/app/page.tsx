@@ -136,9 +136,12 @@ export default function StudentHome() {
 
       {/* Folders — Apps-style grid */}
       <style>{`
-        .folders-grid { grid-template-columns: repeat(2, 1fr); }
-        @media (min-width: 600px) { .folders-grid { grid-template-columns: repeat(3, 1fr); } }
-        @media (min-width: 900px) { .folders-grid { grid-template-columns: repeat(4, 1fr); } }
+        .folders-grid { grid-template-columns: repeat(2, 1fr); gap: 12px; }
+        @media (min-width: 480px) { .folders-grid { grid-template-columns: repeat(3, 1fr); gap: 14px; } }
+        @media (min-width: 768px) { .folders-grid { grid-template-columns: repeat(4, 1fr); gap: 16px; } }
+        @media (min-width: 1024px) { .folders-grid { grid-template-columns: repeat(5, 1fr); gap: 18px; } }
+        .folder-card:hover { transform: translateY(-3px) !important; box-shadow: 0 10px 28px rgba(79,70,229,0.15) !important; }
+        .folder-card:active { transform: scale(0.97) !important; }
       `}</style>
       <div style={S.section}>
         <div style={S.sectionLabel}>✨ Pilih Aktiviti Pembelajaran</div>

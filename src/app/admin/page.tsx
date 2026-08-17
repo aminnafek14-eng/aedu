@@ -926,6 +926,60 @@ export default function AdminPage() {
           <ModalBtns onCancel={() => setBannerModal({ open: false, idx: null })} onSave={saveBanner} />
         </Modal>
       )}
+      {/* ── EDIT STUDENT MODAL ── */}
+      {editStudentModal.open && editStudentModal.student && (
+        <Modal title={`Edit Akaun — ${editStudentModal.student.full_name}`} onClose={() => setEditStudentModal({ open: false, student: null })}>
+          <div style={{ background: '#EEF2FF', border: '1px solid #C7D2FE', borderRadius: 10, padding: '10px 14px', marginBottom: 16, fontSize: 12, color: '#3730A3' }}>
+            Kemaskini ID, kata laluan, atau status premium murid ini.
+          </div>
+          <FG label="ID Murid">
+            <input style={{ ...inpStyle, fontFamily: 'monospace', letterSpacing: 1 }}
+              placeholder="cth: ahmad01"
+              value={editStudentId}
+              onChange={e => setEditStudentId(e.target.value.toLowerCase().replace(/[^a-z0-9]/g, ''))} />
+            <p style={{ fontSize: 11, color: '#94A3B8', marginTop: 4 }}>Huruf kecil dan nombor sahaja. Min 3 aksara.</p>
+          </FG>
+          <FG label="Kata Laluan">
+            <div style={{ position: 'relative' }}>
+              <input
+                style={{ ...inpStyle, paddingRight: 44 }}
+                type={showEditPw ? 'text' : 'password'}
+                placeholder="Kata laluan baru"
+                value={editStudentPw}
+                onChange={e => setEditStudentPw(e.target.value)} />
+              <button onClick={() => setShowEditPw(!showEditPw)}
+                style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, color: '#94A3B8' }}>
+                {showEditPw ? '🙈' : '👁️'}
+              </button>
+            </div>
+          </FG>
+          <FG label="Status Premium">
+            <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', padding: '10px 14px', borderRadius: 10, border: editStudentPremium ? '2px solid #F59E0B' : '2px solid #E2E8F0', background: editStudentPremium ? '#FFFBEB' : '#F8FAFC', transition: 'all 0.2s' }}>
+              <input type="checkbox" checked={editStudentPremium} onChange={e => setEditStudentPremium(e.target.checked)} style={{ width: 18, height: 18, accentColor: '#F59E0B' }} />
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: editStudentPremium ? '#D97706' : '#64748B' }}>
+                  {editStudentPremium ? '💎 Akaun Premium' : '○ Akaun Biasa'}
+                </div>
+                <div style={{ fontSize: 11, color: '#94A3B8', marginTop: 2 }}>Murid premium boleh akses semua apps premium</div>
+              </div>
+            </label>
+          </FG>
+          <div style={{ display: 'flex', gap: 8, marginTop: 20 }}>
+            <button
+              onClick={() => { deleteStudent(editStudentModal.student.id, editStudentModal.student.full_name); setEditStudentModal({ open: false, student: null }) }}
+              style={{ padding: '9px 14px', background: '#FEF2F2', color: '#EF4444', border: '1.5px solid #FECACA', borderRadius: 10, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+              Padam Akaun
+            </button>
+            <div style={{ flex: 1, display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button style={{ padding: '9px 16px', border: '1.5px solid #E2E8F0', borderRadius: 10, background: 'white', cursor: 'pointer', fontSize: 13, color: '#64748B' }}
+                onClick={() => setEditStudentModal({ open: false, student: null })}>Batal</button>
+              <button style={{ padding: '9px 22px', background: 'linear-gradient(135deg,#4F46E5,#6366F1)', color: 'white', border: 'none', borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}
+                onClick={saveEditStudent}>Simpan</button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
       {addStudentModal && (
         <Modal title="Tambah Murid — Akses Aktif" onClose={() => setAddStudentModal(false)}>
           <div style={{ background: '#ECFDF5', border: '1px solid #BBF7D0', borderRadius: 8, padding: '10px 12px', marginBottom: 14, fontSize: 12, color: '#14532D' }}>

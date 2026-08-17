@@ -57,7 +57,7 @@ export default function AdminPage() {
   const [subSearch, setSubSearch] = useState('')
 
   // Forms
-  const [lName, setLName] = useState(''); const [lUrl, setLUrl] = useState(''); const [lImgData, setLImgData] = useState(''); const [lContentType, setLContentType] = useState<'url'|'html'>('url'); const [lHtmlContent, setLHtmlContent] = useState(''); const [lTags, setLTags] = useState<string[]>([])
+  const [lName, setLName] = useState(''); const [lUrl, setLUrl] = useState(''); const [lImgData, setLImgData] = useState(''); const [lContentType, setLContentType] = useState<'url'|'html'>('url'); const [lHtmlContent, setLHtmlContent] = useState(''); const [lTags, setLTags] = useState<string[]>([]); const [lAccessType, setLAccessType] = useState<'free'|'premium'>('free')
   const [bTitle, setBTitle] = useState(''); const [bImgData, setBImgData] = useState(''); const [bLinkUrl, setBLinkUrl] = useState(''); const [bActive, setBActive] = useState(true)
   const [newStudentName, setNewStudentName] = useState(''); const [newStudentPhone, setNewStudentPhone] = useState(''); const [newStudentNote, setNewStudentNote] = useState('')
 
@@ -230,13 +230,13 @@ export default function AdminPage() {
 
 
 
-  const openAddLink = () => { setLName(''); setLUrl(''); setLImgData(''); setLContentType('url'); setLHtmlContent(''); setLTags([]); setLinkModal({ open: true, folderIdx: null, linkIdx: null }) }
+  const openAddLink = () => { setLName(''); setLUrl(''); setLImgData(''); setLContentType('url'); setLHtmlContent(''); setLTags([]); setLAccessType('free'); setLinkModal({ open: true, folderIdx: null, linkIdx: null }) }
   const openEditLink = (linkId: string) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const lnk = links.find((l: any) => l.id === linkId) as any
     if (!lnk) return
     setLName(lnk.name); setLUrl(lnk.url || ''); setLImgData(lnk.img_url || '')
-    setLContentType(lnk.content_type || 'url'); setLHtmlContent(lnk.html_content || ''); setLTags(lnk.tags || [])
+    setLContentType(lnk.content_type || 'url'); setLHtmlContent(lnk.html_content || ''); setLTags(lnk.tags || []); setLAccessType(lnk.access_type || 'free')
     setLinkModal({ open: true, folderIdx: null, linkIdx: linkId })
   }
   const saveLink = async () => {
@@ -256,7 +256,7 @@ export default function AdminPage() {
         html_content: lContentType === 'html' ? lHtmlContent.trim() : null,
         content_type: lContentType, img_url: imgUrl,
         emoji: lContentType === 'html' ? '🎮' : '🔗',
-        tags: lTags, order_num: links.length
+        tags: lTags, access_type: lAccessType, order_num: links.length
       })
       showToast('Aktiviti ditambah!', 'success')
     } else {
@@ -265,7 +265,7 @@ export default function AdminPage() {
         url: lContentType === 'url' ? url : null,
         html_content: lContentType === 'html' ? lHtmlContent.trim() : null,
         content_type: lContentType, img_url: imgUrl,
-        emoji: lContentType === 'html' ? '🎮' : '🔗', tags: lTags
+        emoji: lContentType === 'html' ? '🎮' : '🔗', tags: lTags, access_type: lAccessType
       }).eq('id', linkModal.linkIdx as string)
       showToast('Aktiviti dikemaskini!', 'success')
     }
@@ -574,18 +574,43 @@ export default function AdminPage() {
           <Section title={`Senarai Murid (${students.length})`}>
             {students.length === 0
               ? <Empty msg="Tiada murid berdaftar" />
-              : students.map((s, i) => (
-                <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 10, border: '1px solid #E2E8F0', background: 'white', marginBottom: 6 }}>
-                  <div style={{ width: 34, height: 34, borderRadius: 10, background: '#EEF2FF', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800, color: '#4F46E5', flexShrink: 0 }}>{i + 1}</div>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 13, fontWeight: 700 }}>{s.full_name}</div>
-                    <div style={{ fontSize: 11, color: '#94A3B8' }}>📞 {s.parent_phone}</div>
+              : students.map((s: any, i: number) => {
+                const lastLogin = s.last_login ? new Date(s.last_login) : null
+                const now = new Date()
+                const diffDays = lastLogin ? Math.floor((now.getTime() - lastLogin.getTime()) / (1000*60*60*24)) : null
+                const isActive = diffDays !== null && diffDays <= 7
+                const lastLoginStr = lastLogin ? lastLogin.toLocaleDateString('ms-MY', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' }) : 'Belum pernah login'
+                return (
+                  <div key={s.id} style={{ padding: '12px 14px', borderRadius: 12, border: `1px solid ${isActive ? '#BBF7D0' : '#E2E8F0'}`, background: isActive ? '#F0FDF4' : 'white', marginBottom: 6 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <div style={{ width: 38, height: 38, borderRadius: 10, background: isActive ? 'linear-gradient(135deg,#10B981,#059669)' : '#EEF2FF', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 800, color: isActive ? 'white' : '#4F46E5', flexShrink: 0 }}>{i + 1}</div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                          <span style={{ fontSize: 13, fontWeight: 700 }}>{s.full_name}</span>
+                          {s.student_id && <span style={{ fontSize: 10, fontFamily: 'monospace', color: '#6366F1', background: '#EEF2FF', padding: '1px 6px', borderRadius: 6 }}>{s.student_id}</span>}
+                          {s.is_premium && <span style={{ fontSize: 9, fontWeight: 800, background: 'linear-gradient(135deg,#F59E0B,#D97706)', color: 'white', padding: '1px 7px', borderRadius: 20 }}>💎</span>}
+                        </div>
+                        <div style={{ fontSize: 11, color: '#94A3B8' }}>📞 {s.parent_phone}</div>
+                      </div>
+                      <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: s.is_subscribed ? '#10B981' : '#94A3B8', marginBottom: 3 }}>
+                          {s.is_subscribed ? '✓ Aktif' : '○ Tidak Aktif'}
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <span style={{ width: 6, height: 6, borderRadius: '50%', background: isActive ? '#10B981' : diffDays === null ? '#94A3B8' : '#F59E0B', display: 'inline-block' }} />
+                          <span style={{ fontSize: 10, color: '#64748B' }}>{isActive ? 'Aktif' : diffDays === null ? 'Baru daftar' : `${diffDays}h lalu`}</span>
+                        </div>
+                      </div>
+                    </div>
+                    {/* Last login row */}
+                    <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid #F1F5F9', display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span style={{ fontSize: 10, color: '#94A3B8' }}>🕐 Last login:</span>
+                      <span style={{ fontSize: 10, fontWeight: 600, color: isActive ? '#10B981' : '#94A3B8' }}>{lastLoginStr}</span>
+                      {diffDays !== null && diffDays > 30 && <span style={{ fontSize: 9, fontWeight: 700, background: '#FEF2F2', color: '#EF4444', padding: '1px 7px', borderRadius: 20, marginLeft: 'auto' }}>Tidak aktif</span>}
+                    </div>
                   </div>
-                  <span style={{ fontSize: 10, fontWeight: 700, color: s.is_subscribed ? '#10B981' : '#94A3B8' }}>
-                    {s.is_subscribed ? '✓ Aktif' : '○ Tidak Aktif'}
-                  </span>
-                </div>
-              ))}
+                )
+              })}
           </Section>
         )}
 
@@ -821,6 +846,17 @@ export default function AdminPage() {
               })}
             </div>
             <p style={{ fontSize: 11, color: '#94A3B8' }}>Pilih satu atau lebih tag. Murid boleh filter mengikut tag ini.</p>
+          </FG>
+          <FG label="Akses">
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button type="button" onClick={() => setLAccessType('free')} style={{ flex: 1, padding: '10px', borderRadius: 10, border: `2px solid ${lAccessType==='free'?'#10B981':'#E2E8F0'}`, background: lAccessType==='free'?'#ECFDF5':'white', color: lAccessType==='free'?'#059669':'#64748B', fontWeight: 700, fontSize: 13, cursor: 'pointer', transition: 'all 0.15s', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
+                ✓ FREE
+              </button>
+              <button type="button" onClick={() => setLAccessType('premium')} style={{ flex: 1, padding: '10px', borderRadius: 10, border: `2px solid ${lAccessType==='premium'?'#F59E0B':'#E2E8F0'}`, background: lAccessType==='premium'?'linear-gradient(135deg,#FFF7ED,#FFFBEB)':'white', color: lAccessType==='premium'?'#D97706':'#64748B', fontWeight: 700, fontSize: 13, cursor: 'pointer', transition: 'all 0.15s', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
+                💎 PREMIUM
+              </button>
+            </div>
+            <p style={{ fontSize: 11, color: '#94A3B8', marginTop: 5 }}>FREE: semua murid boleh akses. PREMIUM: hanya murid premium sahaja.</p>
           </FG>
           <FG label="Gambar Ikon (pilihan)"><ImgUpload dataUrl={lImgData} onChange={setLImgData} onRead={readImg} /></FG>
           <ModalBtns onCancel={() => setLinkModal({ open: false, folderIdx: null, linkIdx: null })} onSave={saveLink} />

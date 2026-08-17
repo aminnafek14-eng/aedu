@@ -53,6 +53,11 @@ export default function AdminPage() {
   const [linkModal, setLinkModal] = useState<{ open: boolean; folderIdx: number | null; linkIdx: string | null }>({ open: false, folderIdx: null, linkIdx: null })
   const [bannerModal, setBannerModal] = useState<{ open: boolean; idx: number | null }>({ open: false, idx: null })
   const [addStudentModal, setAddStudentModal] = useState(false)
+  const [editStudentModal, setEditStudentModal] = useState<{ open: boolean; student: any | null }>({ open: false, student: null })
+  const [editStudentId, setEditStudentId] = useState('')
+  const [editStudentPw, setEditStudentPw] = useState('')
+  const [editStudentPremium, setEditStudentPremium] = useState(false)
+  const [showEditPw, setShowEditPw] = useState(false)
   const [toast, setToast] = useState<{ msg: string; type?: string } | null>(null)
   const [subSearch, setSubSearch] = useState('')
 
@@ -162,6 +167,40 @@ export default function AdminPage() {
     showToast(`${name} ditambah dengan akses aktif!`, 'success')
     setAddStudentModal(false); setNewStudentName(''); setNewStudentPhone(''); setNewStudentNote('')
     loadAll()
+  }
+
+  const saveEditStudent = async () => {
+    const s = editStudentModal.student
+    if (!s) return
+    if (!editStudentId.trim()) return showToast('ID tidak boleh kosong', 'error')
+    if (editStudentId.trim().length < 3) return showToast('ID mestilah sekurang-kurangnya 3 aksara', 'error')
+    if (!editStudentPw.trim()) return showToast('Kata laluan tidak boleh kosong', 'error')
+    // Check ID duplicate (exclude current student)
+    const { data: existing } = await supabase.from('students').select('id').eq('student_id', editStudentId.trim().toLowerCase()).neq('id', s.id).maybeSingle()
+    if (existing) return showToast('ID ini sudah digunakan murid lain', 'error')
+    await supabase.from('students').update({
+      student_id: editStudentId.trim().toLowerCase(),
+      password: editStudentPw.trim(),
+      is_premium: editStudentPremium,
+    }).eq('id', s.id)
+    showToast(`✅ Maklumat ${s.full_name} dikemaskini!`, 'success')
+    setEditStudentModal({ open: false, student: null })
+    loadAll()
+  }
+
+  const deleteStudent = async (studentId: string, name: string) => {
+    if (!confirm(`⚠️ Padam akaun "${name}"?\n\nTindakan ini tidak boleh dibatalkan.`)) return
+    await supabase.from('students').delete().eq('id', studentId)
+    showToast(`Akaun ${name} dipadam 🗑️`)
+    loadAll()
+  }
+
+  const openEditStudent = (s: any) => {
+    setEditStudentId(s.student_id || '')
+    setEditStudentPw(s.password || '')
+    setEditStudentPremium(s.is_premium || false)
+    setShowEditPw(false)
+    setEditStudentModal({ open: true, student: s })
   }
 
   const startPresenceWatch = () => {
@@ -581,32 +620,43 @@ export default function AdminPage() {
                 const isActive = diffDays !== null && diffDays <= 7
                 const lastLoginStr = lastLogin ? lastLogin.toLocaleDateString('ms-MY', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' }) : 'Belum pernah login'
                 return (
-                  <div key={s.id} style={{ padding: '12px 14px', borderRadius: 12, border: `1px solid ${isActive ? '#BBF7D0' : '#E2E8F0'}`, background: isActive ? '#F0FDF4' : 'white', marginBottom: 6 }}>
+                  <div key={s.id} style={{ padding: '12px 14px', borderRadius: 12, border: `1px solid ${isActive ? '#BBF7D0' : '#E2E8F0'}`, background: isActive ? '#F0FDF4' : 'white', marginBottom: 8 }}>
+                    {/* Row 1: Info + action buttons */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                       <div style={{ width: 38, height: 38, borderRadius: 10, background: isActive ? 'linear-gradient(135deg,#10B981,#059669)' : '#EEF2FF', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 800, color: isActive ? 'white' : '#4F46E5', flexShrink: 0 }}>{i + 1}</div>
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 2, flexWrap: 'wrap' }}>
                           <span style={{ fontSize: 13, fontWeight: 700 }}>{s.full_name}</span>
-                          {s.student_id && <span style={{ fontSize: 10, fontFamily: 'monospace', color: '#6366F1', background: '#EEF2FF', padding: '1px 6px', borderRadius: 6 }}>{s.student_id}</span>}
+                          {s.student_id
+                            ? <span style={{ fontSize: 10, fontFamily: 'monospace', color: '#6366F1', background: '#EEF2FF', padding: '1px 7px', borderRadius: 6, fontWeight: 700 }}>{s.student_id}</span>
+                            : <span style={{ fontSize: 10, color: '#EF4444', background: '#FEF2F2', padding: '1px 7px', borderRadius: 6 }}>Tiada ID</span>}
                           {s.is_premium && <span style={{ fontSize: 9, fontWeight: 800, background: 'linear-gradient(135deg,#F59E0B,#D97706)', color: 'white', padding: '1px 7px', borderRadius: 20 }}>💎</span>}
                         </div>
                         <div style={{ fontSize: 11, color: '#94A3B8' }}>📞 {s.parent_phone}</div>
+                        {!s.password && <div style={{ fontSize: 10, color: '#F59E0B', fontWeight: 600, marginTop: 2 }}>⚠️ Belum ada kata laluan</div>}
                       </div>
-                      <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                        <div style={{ fontSize: 10, fontWeight: 700, color: s.is_subscribed ? '#10B981' : '#94A3B8', marginBottom: 3 }}>
+                      {/* Action buttons */}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flexShrink: 0 }}>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: s.is_subscribed ? '#10B981' : '#94A3B8', textAlign: 'right', marginBottom: 2 }}>
                           {s.is_subscribed ? '✓ Aktif' : '○ Tidak Aktif'}
                         </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                          <span style={{ width: 6, height: 6, borderRadius: '50%', background: isActive ? '#10B981' : diffDays === null ? '#94A3B8' : '#F59E0B', display: 'inline-block' }} />
-                          <span style={{ fontSize: 10, color: '#64748B' }}>{isActive ? 'Aktif' : diffDays === null ? 'Baru daftar' : `${diffDays}h lalu`}</span>
+                        <div style={{ display: 'flex', gap: 4 }}>
+                          <button onClick={() => openEditStudent(s)} style={{ padding: '5px 10px', borderRadius: 8, border: 'none', background: '#EEF2FF', color: '#4F46E5', fontSize: 11, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
+                            {Icons.edit} Edit
+                          </button>
+                          <button onClick={() => deleteStudent(s.id, s.full_name)} style={{ padding: '5px 10px', borderRadius: 8, border: 'none', background: '#FEF2F2', color: '#EF4444', fontSize: 11, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
+                            {Icons.trash} Padam
+                          </button>
                         </div>
                       </div>
                     </div>
-                    {/* Last login row */}
+                    {/* Row 2: Last login */}
                     <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid #F1F5F9', display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <span style={{ fontSize: 10, color: '#94A3B8' }}>🕐 Last login:</span>
-                      <span style={{ fontSize: 10, fontWeight: 600, color: isActive ? '#10B981' : '#94A3B8' }}>{lastLoginStr}</span>
-                      {diffDays !== null && diffDays > 30 && <span style={{ fontSize: 9, fontWeight: 700, background: '#FEF2F2', color: '#EF4444', padding: '1px 7px', borderRadius: 20, marginLeft: 'auto' }}>Tidak aktif</span>}
+                      <span style={{ width: 6, height: 6, borderRadius: '50%', background: isActive ? '#10B981' : diffDays === null ? '#94A3B8' : '#F59E0B', display: 'inline-block', flexShrink: 0 }} />
+                      <span style={{ fontSize: 10, color: '#94A3B8' }}>Last login:</span>
+                      <span style={{ fontSize: 10, fontWeight: 600, color: isActive ? '#10B981' : '#64748B' }}>{lastLoginStr}</span>
+                      {diffDays !== null && diffDays > 30 && <span style={{ fontSize: 9, fontWeight: 700, background: '#FEF2F2', color: '#EF4444', padding: '1px 7px', borderRadius: 20, marginLeft: 'auto' }}>Tidak aktif &gt;30 hari</span>}
+                      {!s.student_id && <span style={{ fontSize: 9, fontWeight: 700, background: '#FFF7ED', color: '#F59E0B', padding: '1px 7px', borderRadius: 20, marginLeft: 'auto' }}>Perlu set ID & password</span>}
                     </div>
                   </div>
                 )

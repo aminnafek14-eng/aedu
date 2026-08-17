@@ -13,7 +13,7 @@ export default function SignupPage() {
   const [step, setStep] = useState<Step>('form')
   const [fullName, setFullName] = useState('')
   const [studentId, setStudentId] = useState('')
-  const [password, setPassword] = useState('')
+  const [password, setPassword] = useState('1234')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [phone, setPhone] = useState('')
   const [loading, setLoading] = useState(false)
@@ -38,7 +38,13 @@ export default function SignupPage() {
   const handleNameChange = (val: string) => {
     setFullName(val.toUpperCase())
     if (!studentId) {
-      const auto = val.toLowerCase().trim().split(' ')[0].replace(/[^a-z0-9]/g, '').slice(0, 8)
+      // Auto generate ID: gabung semua perkataan, buang bukan alphanumeric
+      const auto = val.toLowerCase().trim()
+        .split(' ')
+        .filter(w => w.length > 0)
+        .join('')
+        .replace(/[^a-z0-9]/g, '')
+        .slice(0, 12)
       setStudentId(auto)
     }
   }
@@ -115,7 +121,7 @@ export default function SignupPage() {
           <label style={S.label}>ID Murid <span style={{ color: '#94A3B8', fontWeight: 400 }}>(untuk login)</span></label>
           <input style={{ ...S.input, fontFamily: 'monospace', letterSpacing: 1 }}
             placeholder="cth: ahmad01" value={studentId}
-            onChange={e => setStudentId(e.target.value.toLowerCase().replace(/[^a-z0-9]/g, ''))} />
+            onChange={e => setStudentId(e.target.value.toLowerCase().replace(/[^a-z0-9]/g, ''))} onKeyDown={e => { if(e.key === ' ') e.preventDefault() }} />
           <p style={{ fontSize: 11, color: '#94A3B8', marginTop: 4 }}>Huruf kecil dan nombor sahaja. Min 3 aksara.</p>
         </div>
 

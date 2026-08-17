@@ -6,9 +6,12 @@ import { supabase, type Banner } from '@/lib/supabase'
 type LinkItem = {
   id: string; name: string; url: string | null
   html_content: string | null; content_type: 'url' | 'html'
-  img_url: string | null; emoji: string; tags: string[]
+  img_url: string | null; emoji: string
+  tags: string[]; access_type: 'free' | 'premium'
   folder_id: string; order_num: number
 }
+
+type StudentSession = { id: string; full_name: string; student_id: string; is_subscribed: boolean; is_premium: boolean }
 
 const COLORS = [
   { bg: 'linear-gradient(145deg,#FF6B6B,#FF8E53)', shadow: 'rgba(255,107,107,0.35)' },
@@ -25,28 +28,18 @@ const COLORS = [
   { bg: 'linear-gradient(145deg,#84CC16,#4D7C0F)', shadow: 'rgba(132,204,22,0.35)' },
 ]
 
-const TAG_COLORS: Record<string, { bg: string; text: string; border: string }> = {
-  'Tahun 1': { bg: '#FFF0F0', text: '#EF4444', border: '#FECACA' },
-  'Tahun 2': { bg: '#FFF7ED', text: '#F97316', border: '#FED7AA' },
-  'Tahun 3': { bg: '#FEFCE8', text: '#D97706', border: '#FDE68A' },
-  'Tahun 4': { bg: '#F0FDF4', text: '#10B981', border: '#BBF7D0' },
-  'Tahun 5': { bg: '#EFF6FF', text: '#3B82F6', border: '#BFDBFE' },
-  'Tahun 6': { bg: '#F5F3FF', text: '#7C3AED', border: '#DDD6FE' },
-  'Matematik': { bg: '#FFF0F0', text: '#EF4444', border: '#FECACA' },
-  'Sains': { bg: '#F0FDF4', text: '#10B981', border: '#BBF7D0' },
-  'Bahasa': { bg: '#EFF6FF', text: '#3B82F6', border: '#BFDBFE' },
-}
-
-const getTagStyle = (tag: string) => TAG_COLORS[tag] || { bg: '#F1F5F9', text: '#64748B', border: '#E2E8F0' }
+// Extract unique subjects from tags (non-Tahun tags)
+const YEAR_TAGS = ['Tahun 1', 'Tahun 2', 'Tahun 3', 'Tahun 4', 'Tahun 5', 'Tahun 6']
 
 export default function StudentHome() {
   const router = useRouter()
-  const [student, setStudent] = useState<{ id: string; full_name: string } | null>(null)
+  const [student, setStudent] = useState<StudentSession | null>(null)
   const [allLinks, setAllLinks] = useState<LinkItem[]>([])
   const [banners, setBanners] = useState<Banner[]>([])
   const [bannerIdx, setBannerIdx] = useState(0)
   const [loading, setLoading] = useState(true)
-  const [activeFilter, setActiveFilter] = useState<string>('Semua')
+  const [filterSubject, setFilterSubject] = useState('Semua')
+  const [filterYear, setFilterYear] = useState('Semua')
   const [activeLink, setActiveLink] = useState<LinkItem | null>(null)
   const [iframeLoading, setIframeLoading] = useState(false)
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
@@ -63,12 +56,10 @@ export default function StudentHome() {
     return () => { channelRef.current?.unsubscribe(); clearTimeout(timeout) }
   }, [])
 
-  const joinPresence = (s: { id: string; full_name: string }) => {
+  const joinPresence = (s: StudentSession) => {
     const ch = supabase.channel('aedu_presence', { config: { presence: { key: s.id } } })
     ch.subscribe(async (status) => {
-      if (status === 'SUBSCRIBED') {
-        await ch.track({ user_id: s.id, full_name: s.full_name, online_at: new Date().toISOString() })
-      }
+      if (status === 'SUBSCRIBED') await ch.track({ user_id: s.id, full_name: s.full_name, online_at: new Date().toISOString() })
     })
     channelRef.current = ch
   }
@@ -91,18 +82,34 @@ export default function StudentHome() {
 
   const logout = () => {
     channelRef.current?.unsubscribe()
-    sessionStorage.removeItem('aedu_student')
-    localStorage.removeItem('aedu_student')
+    sessionStorage.removeItem('aedu_student'); localStorage.removeItem('aedu_student')
     router.replace('/login')
   }
 
-  // Get all unique tags from links
-  const allTags = ['Semua', ...Array.from(new Set(allLinks.flatMap(l => l.tags || []))).sort()]
+  // Get unique subjects (non-year tags)
+  const allSubjects = ['Semua', ...Array.from(new Set(
+    allLinks.flatMap(l => (l.tags || []).filter(t => !YEAR_TAGS.includes(t)))
+  )).sort()]
+
+  // Get year tags available for current subject filter
+  const availableYears = ['Semua', ...Array.from(new Set(
+    allLinks
+      .filter(l => filterSubject === 'Semua' || (l.tags || []).includes(filterSubject))
+      .flatMap(l => (l.tags || []).filter(t => YEAR_TAGS.includes(t)))
+  )).sort()]
 
   // Filter links
-  const filteredLinks = activeFilter === 'Semua'
-    ? allLinks
-    : allLinks.filter(l => (l.tags || []).includes(activeFilter))
+  const filteredLinks = allLinks.filter(l => {
+    const tags = l.tags || []
+    const subjectMatch = filterSubject === 'Semua' || tags.includes(filterSubject)
+    const yearMatch = filterYear === 'Semua' || tags.includes(filterYear)
+    return subjectMatch && yearMatch
+  })
+
+  const canAccess = (link: LinkItem) => {
+    if (link.access_type !== 'premium') return true
+    return student?.is_premium || student?.is_subscribed
+  }
 
   const firstName = student?.full_name.split(' ')[0] || ''
 
@@ -113,53 +120,57 @@ export default function StudentHome() {
         <div style={{ height: '100%', background: 'white', borderRadius: 20, animation: 'loadbar 1.5s ease-in-out infinite' }} />
       </div>
       <p style={{ color: 'rgba(255,255,255,0.8)', marginTop: 14, fontSize: 14, fontWeight: 600 }}>Memuatkan AEdu.my...</p>
-      <style>{`@keyframes loadbar { 0%{width:0%} 50%{width:70%} 100%{width:100%} }`}</style>
+      <style>{`@keyframes loadbar{0%{width:0%}50%{width:70%}100%{width:100%}}`}</style>
     </div>
   )
 
   return (
     <div style={{ minHeight: '100vh', background: '#F0F4FF', fontFamily: "'Inter',sans-serif" }}>
       <style>{`
-        @keyframes fadeUp { from{opacity:0;transform:translateY(14px)} to{opacity:1;transform:translateY(0)} }
-        @keyframes loadbar { 0%{width:0%;opacity:1} 80%{width:90%;opacity:1} 100%{width:100%;opacity:0} }
-        .app-card { transition: transform 0.18s, box-shadow 0.18s !important; animation: fadeUp 0.35s ease both; }
-        .app-card:active { transform: scale(0.93) !important; }
-        @media (hover:hover) { .app-card:hover { transform: translateY(-4px) scale(1.02) !important; } }
-        .filter-btn { transition: all 0.2s; }
-        .filter-btn:active { transform: scale(0.94); }
-        .logout-btn:active { transform: scale(0.95); }
-        .apps-grid { display: grid; grid-template-columns: repeat(2,1fr); gap: 14px; }
-        @media (min-width:480px) { .apps-grid { grid-template-columns: repeat(3,1fr); } }
-        @media (min-width:768px) { .apps-grid { grid-template-columns: repeat(4,1fr); gap: 18px; } }
-        @media (min-width:1100px) { .apps-grid { grid-template-columns: repeat(5,1fr); gap: 20px; } }
-        .filter-scroll::-webkit-scrollbar { display: none; }
+        @keyframes fadeUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
+        @keyframes loadbar{0%{width:0%;opacity:1}80%{width:90%;opacity:1}100%{width:100%;opacity:0}}
+        .app-card{transition:transform .18s,box-shadow .18s!important;animation:fadeUp .35s ease both}
+        .app-card:active{transform:scale(.93)!important}
+        @media(hover:hover){.app-card:hover{transform:translateY(-4px) scale(1.02)!important}}
+        .filter-btn{transition:all .2s;border:none;cursor:pointer;font-family:'Plus Jakarta Sans',sans-serif}
+        .filter-btn:active{transform:scale(.94)}
+        .filter-scroll::-webkit-scrollbar{display:none}
+        .apps-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
+        @media(min-width:480px){.apps-grid{grid-template-columns:repeat(3,1fr)}}
+        @media(min-width:768px){.apps-grid{grid-template-columns:repeat(4,1fr);gap:18px}}
+        @media(min-width:1100px){.apps-grid{grid-template-columns:repeat(5,1fr);gap:20px}}
       `}</style>
 
-      {/* ── HEADER ── */}
+      {/* HEADER */}
       <div style={{ background: 'linear-gradient(135deg,#4F46E5 0%,#06B6D4 100%)', padding: '16px 16px 20px', position: 'relative', overflow: 'hidden' }}>
         <div style={{ position: 'absolute', top: -30, right: -20, width: 120, height: 120, background: 'rgba(255,255,255,0.07)', borderRadius: '50%' }} />
         <div style={{ position: 'absolute', bottom: -40, left: '25%', width: 160, height: 160, background: 'rgba(255,255,255,0.04)', borderRadius: '50%' }} />
-
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14, position: 'relative' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <img src="/logo.png" alt="AEdu" style={{ width: 40, height: 40, objectFit: 'contain', filter: 'drop-shadow(0 2px 8px rgba(0,0,0,0.2))' }} />
-            <span style={{ fontFamily: "'Plus Jakarta Sans',sans-serif", fontWeight: 900, fontSize: 22, color: 'white', letterSpacing: '-0.5px' }}>AEdu.my</span>
+            <span style={{ fontFamily: "'Plus Jakarta Sans',sans-serif", fontWeight: 900, fontSize: 22, color: 'white' }}>AEdu.my</span>
           </div>
-          <button className="logout-btn" onClick={logout} style={{ padding: '8px 16px', background: 'rgba(255,255,255,0.18)', border: '1.5px solid rgba(255,255,255,0.35)', borderRadius: 30, color: 'white', fontSize: 13, fontWeight: 700, cursor: 'pointer', backdropFilter: 'blur(8px)', transition: 'all 0.15s' }}>
-            Keluar
-          </button>
+          <button onClick={logout} style={{ padding: '8px 16px', background: 'rgba(255,255,255,0.18)', border: '1.5px solid rgba(255,255,255,0.35)', borderRadius: 30, color: 'white', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Keluar</button>
         </div>
-
         {student && (
-          <div style={{ background: 'rgba(255,255,255,0.15)', backdropFilter: 'blur(10px)', borderRadius: 16, padding: '12px 16px', border: '1px solid rgba(255,255,255,0.25)', position: 'relative' }}>
-            <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.75)', marginBottom: 2 }}>Selamat datang! 🎉</div>
-            <div style={{ fontFamily: "'Plus Jakarta Sans',sans-serif", fontWeight: 900, fontSize: 20, color: 'white' }}>Hai, {firstName}! 👋</div>
-            <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.7)', marginTop: 2 }}>Hari ni kita belajar sambil bermain! 🚀</div>
+          <div style={{ background: 'rgba(255,255,255,0.15)', backdropFilter: 'blur(10px)', borderRadius: 16, padding: '12px 16px', border: '1px solid rgba(255,255,255,0.25)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div>
+                <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.75)', marginBottom: 2 }}>Selamat datang! 🎉</div>
+                <div style={{ fontFamily: "'Plus Jakarta Sans',sans-serif", fontWeight: 900, fontSize: 18, color: 'white' }}>Hai, {firstName}! 👋</div>
+                <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.65)', marginTop: 2 }}>ID: <span style={{ fontFamily: 'monospace', fontWeight: 700 }}>{student.student_id}</span></div>
+              </div>
+              {(student.is_premium || student.is_subscribed) && (
+                <div style={{ background: 'linear-gradient(135deg,#F59E0B,#D97706)', borderRadius: 20, padding: '5px 12px', fontSize: 11, fontWeight: 800, color: 'white', flexShrink: 0 }}>
+                  💎 PREMIUM
+                </div>
+              )}
+            </div>
           </div>
         )}
       </div>
 
-      {/* ── BANNER ── */}
+      {/* BANNER */}
       {banners.length > 0 && (
         <div style={{ margin: '14px 12px 0', borderRadius: 20, overflow: 'hidden', position: 'relative', background: '#1e1b4b', boxShadow: '0 8px 32px rgba(79,70,229,0.2)' }}>
           {banners.map((b, i) => (
@@ -175,103 +186,143 @@ export default function StudentHome() {
           ))}
           {banners.length > 1 && (
             <div style={{ position: 'absolute', bottom: 10, left: '50%', transform: 'translateX(-50%)', display: 'flex', gap: 5 }}>
-              {banners.map((_, i) => (
-                <button key={i} onClick={() => setBannerIdx(i)} style={{ height: 6, width: i === bannerIdx ? 20 : 6, borderRadius: 3, border: 'none', background: i === bannerIdx ? 'white' : 'rgba(255,255,255,0.45)', cursor: 'pointer', padding: 0, transition: 'all 0.3s' }} />
-              ))}
+              {banners.map((_, i) => <button key={i} onClick={() => setBannerIdx(i)} style={{ height: 6, width: i === bannerIdx ? 20 : 6, borderRadius: 3, border: 'none', background: i === bannerIdx ? 'white' : 'rgba(255,255,255,0.45)', cursor: 'pointer', padding: 0, transition: 'all 0.3s' }} />)}
             </div>
           )}
         </div>
       )}
 
-      {/* ── FILTER TABS ── */}
-      {allTags.length > 1 && (
-        <div style={{ padding: '16px 12px 0' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-            <div style={{ width: 4, height: 20, background: 'linear-gradient(#4F46E5,#06B6D4)', borderRadius: 4 }} />
-            <span style={{ fontFamily: "'Plus Jakarta Sans',sans-serif", fontWeight: 800, fontSize: 15, color: '#1E293B' }}>Tapis Mengikut Tahun</span>
-            <span style={{ fontSize: 16 }}>🎯</span>
-          </div>
-          <div className="filter-scroll" style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4, scrollbarWidth: 'none' }}>
-            {allTags.map(tag => {
-              const isActive = activeFilter === tag
-              const ts = getTagStyle(tag)
-              return (
-                <button key={tag} className="filter-btn" onClick={() => setActiveFilter(tag)} style={{
-                  flexShrink: 0, padding: '9px 18px',
-                  borderRadius: 30, border: `2px solid ${isActive ? ts.text : ts.border}`,
-                  background: isActive ? ts.text : 'white',
-                  color: isActive ? 'white' : ts.text,
-                  fontSize: 13, fontWeight: 700, cursor: 'pointer',
-                  boxShadow: isActive ? `0 4px 14px ${ts.text}40` : '0 2px 6px rgba(0,0,0,0.06)',
-                  fontFamily: "'Plus Jakarta Sans',sans-serif",
-                  transition: 'all 0.2s'
-                }}>
-                  {tag === 'Semua' ? '✨ Semua' : tag}
-                </button>
-              )
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* ── APPS GRID ── */}
+      {/* FILTER SECTION */}
       <div style={{ padding: '16px 12px 0' }}>
+        {/* Subject Filter */}
+        {allSubjects.length > 1 && (
+          <>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+              <div style={{ width: 4, height: 20, background: 'linear-gradient(#4F46E5,#06B6D4)', borderRadius: 4 }} />
+              <span style={{ fontFamily: "'Plus Jakarta Sans',sans-serif", fontWeight: 800, fontSize: 14, color: '#1E293B' }}>Pilih Subjek</span>
+              <span style={{ fontSize: 15 }}>📖</span>
+            </div>
+            <div className="filter-scroll" style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4, scrollbarWidth: 'none', marginBottom: 12 }}>
+              {allSubjects.map(subj => {
+                const active = filterSubject === subj
+                return (
+                  <button key={subj} className="filter-btn" onClick={() => { setFilterSubject(subj); setFilterYear('Semua') }} style={{
+                    flexShrink: 0, padding: '8px 16px', borderRadius: 30,
+                    background: active ? '#4F46E5' : 'white',
+                    color: active ? 'white' : '#475569',
+                    fontSize: 13, fontWeight: 700,
+                    boxShadow: active ? '0 4px 14px rgba(79,70,229,0.3)' : '0 2px 6px rgba(0,0,0,0.07)',
+                    border: `2px solid ${active ? '#4F46E5' : '#E2E8F0'}`
+                  }}>
+                    {subj === 'Semua' ? '✨ Semua' : subj}
+                  </button>
+                )
+              })}
+            </div>
+          </>
+        )}
+
+        {/* Year Filter (shown after subject selected) */}
+        {availableYears.length > 1 && (
+          <>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+              <div style={{ width: 4, height: 18, background: 'linear-gradient(#F59E0B,#EF4444)', borderRadius: 4 }} />
+              <span style={{ fontFamily: "'Plus Jakarta Sans',sans-serif", fontWeight: 800, fontSize: 13, color: '#1E293B' }}>Tapis Tahun</span>
+              <span style={{ fontSize: 14 }}>🎯</span>
+            </div>
+            <div className="filter-scroll" style={{ display: 'flex', gap: 7, overflowX: 'auto', paddingBottom: 4, scrollbarWidth: 'none', marginBottom: 12 }}>
+              {availableYears.map(yr => {
+                const active = filterYear === yr
+                const colors: Record<string, string> = { 'Tahun 1': '#EF4444', 'Tahun 2': '#F97316', 'Tahun 3': '#D97706', 'Tahun 4': '#10B981', 'Tahun 5': '#3B82F6', 'Tahun 6': '#7C3AED' }
+                const c = colors[yr] || '#64748B'
+                return (
+                  <button key={yr} className="filter-btn" onClick={() => setFilterYear(yr)} style={{
+                    flexShrink: 0, padding: '7px 14px', borderRadius: 30,
+                    background: active ? c : 'white',
+                    color: active ? 'white' : c,
+                    fontSize: 12, fontWeight: 800,
+                    boxShadow: active ? `0 4px 12px ${c}50` : '0 2px 6px rgba(0,0,0,0.07)',
+                    border: `2px solid ${active ? c : c + '40'}`
+                  }}>
+                    {yr === 'Semua' ? '📚 Semua Tahun' : yr}
+                  </button>
+                )
+              })}
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* APPS GRID */}
+      <div style={{ padding: '4px 12px 0' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <div style={{ width: 4, height: 20, background: 'linear-gradient(#4F46E5,#06B6D4)', borderRadius: 4 }} />
             <span style={{ fontFamily: "'Plus Jakarta Sans',sans-serif", fontWeight: 800, fontSize: 15, color: '#1E293B' }}>
-              {activeFilter === 'Semua' ? 'Semua Aktiviti' : `Aktiviti ${activeFilter}`}
+              {filterSubject === 'Semua' && filterYear === 'Semua' ? 'Semua Aktiviti' : filterSubject !== 'Semua' && filterYear !== 'Semua' ? `${filterSubject} — ${filterYear}` : filterSubject !== 'Semua' ? filterSubject : filterYear}
             </span>
           </div>
-          <span style={{ fontSize: 12, color: '#94A3B8', fontWeight: 600, background: 'white', padding: '4px 10px', borderRadius: 20, border: '1px solid #E2E8F0' }}>
+          <span style={{ fontSize: 11, color: '#94A3B8', fontWeight: 600, background: 'white', padding: '4px 10px', borderRadius: 20, border: '1px solid #E2E8F0' }}>
             {filteredLinks.length} aktiviti
           </span>
         </div>
 
         {filteredLinks.length === 0
-          ? (
-            <div style={{ textAlign: 'center', padding: '50px 20px', background: 'white', borderRadius: 24, border: '2px dashed #E2E8F0' }}>
+          ? <div style={{ textAlign: 'center', padding: '50px 20px', background: 'white', borderRadius: 24, border: '2px dashed #E2E8F0' }}>
               <div style={{ fontSize: 56, marginBottom: 12 }}>🔍</div>
-              <div style={{ fontWeight: 700, color: '#64748B', fontSize: 15 }}>Tiada aktiviti untuk {activeFilter}</div>
-              <div style={{ fontSize: 13, color: '#94A3B8', marginTop: 4 }}>Cuba pilih tahun lain</div>
+              <div style={{ fontWeight: 700, color: '#64748B', fontSize: 15 }}>Tiada aktiviti ditemui</div>
+              <div style={{ fontSize: 13, color: '#94A3B8', marginTop: 4 }}>Cuba tapis yang lain</div>
             </div>
-          )
-          : (
-            <div className="apps-grid">
+          : <div className="apps-grid">
               {filteredLinks.map((l, li) => {
                 const color = COLORS[li % COLORS.length]
                 const tags = l.tags || []
+                const yearTags = tags.filter(t => YEAR_TAGS.includes(t))
+                const isPremium = l.access_type === 'premium'
+                const accessible = canAccess(l)
+
                 return (
-                  <div key={l.id} className="app-card" onClick={() => { setIframeLoading(true); setActiveLink(l) }}
-                    style={{ cursor: 'pointer', animationDelay: `${li * 0.05}s` }}>
-                    <div style={{ background: 'white', borderRadius: 20, overflow: 'hidden', boxShadow: `0 6px 24px ${color.shadow}` }}>
+                  <div key={l.id} className="app-card" onClick={() => {
+                    if (!accessible) return
+                    setIframeLoading(true); setActiveLink(l)
+                  }} style={{ cursor: accessible ? 'pointer' : 'not-allowed', animationDelay: `${li * 0.05}s`, opacity: accessible ? 1 : 0.75 }}>
+                    <div style={{ background: 'white', borderRadius: 20, overflow: 'hidden', boxShadow: `0 6px 24px ${color.shadow}`, position: 'relative' }}>
                       {/* Icon area */}
                       <div style={{ aspectRatio: '1/1', background: l.img_url ? 'transparent' : color.bg, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
                         {l.img_url
                           ? <img src={l.img_url} alt={l.name} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
                           : <>
                               <div style={{ position: 'absolute', top: -8, right: -8, width: 50, height: 50, background: 'rgba(255,255,255,0.15)', borderRadius: '50%' }} />
-                              <div style={{ position: 'absolute', bottom: -12, left: -8, width: 70, height: 70, background: 'rgba(255,255,255,0.1)', borderRadius: '50%' }} />
                               <span style={{ fontSize: 48, position: 'relative', zIndex: 1 }}>🎮</span>
                             </>}
-                        {/* Play button */}
-                        <div style={{ position: 'absolute', bottom: 8, right: 8, width: 30, height: 30, background: 'rgba(255,255,255,0.92)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, boxShadow: '0 2px 8px rgba(0,0,0,0.2)', zIndex: 2 }}>▶</div>
+
+                        {/* FREE / PREMIUM badge */}
+                        <div style={{ position: 'absolute', top: 7, left: 7 }}>
+                          {isPremium
+                            ? <div style={{ background: 'linear-gradient(135deg,#F59E0B,#D97706)', color: 'white', fontSize: 9, fontWeight: 900, padding: '3px 8px', borderRadius: 20, display: 'flex', alignItems: 'center', gap: 3, boxShadow: '0 2px 8px rgba(245,158,11,0.5)' }}>💎 PREMIUM</div>
+                            : <div style={{ background: 'linear-gradient(135deg,#10B981,#059669)', color: 'white', fontSize: 9, fontWeight: 900, padding: '3px 8px', borderRadius: 20, boxShadow: '0 2px 8px rgba(16,185,129,0.4)' }}>✓ FREE</div>}
+                        </div>
+
+                        {/* Lock overlay for premium if not accessible */}
+                        {!accessible && (
+                          <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(2px)' }}>
+                            <div style={{ fontSize: 28, marginBottom: 4 }}>🔒</div>
+                            <div style={{ color: 'white', fontSize: 10, fontWeight: 800, textAlign: 'center', padding: '0 8px' }}>PREMIUM</div>
+                          </div>
+                        )}
                       </div>
-                      {/* Name + tags */}
+
+                      {/* Name + year tags */}
                       <div style={{ padding: '8px 9px 10px' }}>
-                        <div style={{ fontFamily: "'Plus Jakarta Sans',sans-serif", fontWeight: 800, fontSize: 12, color: '#1E293B', textAlign: 'center', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: tags.length > 0 ? 6 : 0 }}>
+                        <div style={{ fontFamily: "'Plus Jakarta Sans',sans-serif", fontWeight: 800, fontSize: 12, color: '#1E293B', textAlign: 'center', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: yearTags.length > 0 ? 5 : 0 }}>
                           {l.name}
                         </div>
-                        {/* Tags */}
-                        {tags.length > 0 && (
-                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3, justifyContent: 'center' }}>
-                            {tags.slice(0, 2).map(tag => {
-                              const ts = getTagStyle(tag)
-                              return (
-                                <span key={tag} style={{ fontSize: 9, fontWeight: 800, padding: '2px 7px', borderRadius: 20, background: ts.bg, color: ts.text, border: `1px solid ${ts.border}`, letterSpacing: '0.02em' }}>
-                                  {tag}
-                                </span>
-                              )
+                        {yearTags.length > 0 && (
+                          <div style={{ display: 'flex', gap: 3, justifyContent: 'center', flexWrap: 'wrap' }}>
+                            {yearTags.slice(0, 2).map(tag => {
+                              const yColors: Record<string, { bg: string; text: string }> = { 'Tahun 1': { bg: '#FEE2E2', text: '#DC2626' }, 'Tahun 2': { bg: '#FED7AA', text: '#EA580C' }, 'Tahun 3': { bg: '#FEF3C7', text: '#D97706' }, 'Tahun 4': { bg: '#D1FAE5', text: '#059669' }, 'Tahun 5': { bg: '#DBEAFE', text: '#2563EB' }, 'Tahun 6': { bg: '#EDE9FE', text: '#7C3AED' } }
+                              const yc = yColors[tag] || { bg: '#F1F5F9', text: '#64748B' }
+                              return <span key={tag} style={{ fontSize: 9, fontWeight: 800, padding: '2px 6px', borderRadius: 20, background: yc.bg, color: yc.text }}>{tag}</span>
                             })}
                           </div>
                         )}
@@ -280,42 +331,26 @@ export default function StudentHome() {
                   </div>
                 )
               })}
-            </div>
-          )}
+            </div>}
       </div>
 
-      {/* ── FOOTER ── */}
+      {/* FOOTER */}
       <div style={{ textAlign: 'center', padding: '28px 16px 20px', marginTop: 8 }}>
-        <div style={{ fontSize: 12, color: '#94A3B8', marginBottom: 4 }}>
-          Dibina oleh <strong style={{ color: '#64748B' }}>Cikgu Amin</strong> dari SK Felda Inas
-        </div>
+        <div style={{ fontSize: 12, color: '#94A3B8', marginBottom: 4 }}>Dibina oleh <strong style={{ color: '#64748B' }}>Cikgu Amin</strong> dari SK Felda Inas</div>
         <div style={{ fontSize: 10, color: '#CBD5E1' }}>© 2026 AEdu.my — Hak Cipta Terpelihara</div>
         <a href="/admin" style={{ display: 'inline-block', marginTop: 12, fontSize: 11, color: '#CBD5E1', textDecoration: 'none', padding: '5px 14px', border: '1px solid #E2E8F0', borderRadius: 20, background: 'white' }}>⚙️ Admin</a>
       </div>
 
-      {/* ── IFRAME VIEWER ── */}
+      {/* IFRAME VIEWER */}
       {activeLink && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 200, display: 'flex', flexDirection: 'column', background: 'white' }}>
           <div style={{ height: 52, background: 'linear-gradient(135deg,#4F46E5,#06B6D4)', display: 'flex', alignItems: 'center', padding: '0 12px', gap: 10, flexShrink: 0 }}>
-            <button onClick={() => setActiveLink(null)} style={{ padding: '7px 16px', background: 'rgba(255,255,255,0.2)', border: '1.5px solid rgba(255,255,255,0.35)', borderRadius: 25, color: 'white', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
-              ✕ Tutup
-            </button>
-            <div style={{ flex: 1, color: 'white', fontSize: 14, fontWeight: 800, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: "'Plus Jakarta Sans',sans-serif" }}>
-              {activeLink.name}
-            </div>
-            {(activeLink.tags || []).slice(0, 2).map(tag => {
-              const ts = getTagStyle(tag)
-              return <span key={tag} style={{ fontSize: 10, fontWeight: 800, padding: '3px 9px', borderRadius: 20, background: 'rgba(255,255,255,0.2)', color: 'white', border: '1px solid rgba(255,255,255,0.3)', flexShrink: 0 }}>{tag}</span>
-            })}
-            {activeLink.content_type === 'url' && activeLink.url && (
-              <a href={activeLink.url} target="_blank" rel="noopener noreferrer" style={{ padding: '6px 12px', background: 'rgba(255,255,255,0.15)', border: '1px solid rgba(255,255,255,0.25)', borderRadius: 10, color: 'white', fontSize: 13, textDecoration: 'none', flexShrink: 0 }}>↗</a>
-            )}
+            <button onClick={() => setActiveLink(null)} style={{ padding: '7px 16px', background: 'rgba(255,255,255,0.2)', border: '1.5px solid rgba(255,255,255,0.35)', borderRadius: 25, color: 'white', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>✕ Tutup</button>
+            <div style={{ flex: 1, color: 'white', fontSize: 14, fontWeight: 800, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: "'Plus Jakarta Sans',sans-serif" }}>{activeLink.name}</div>
+            {activeLink.access_type === 'premium' && <span style={{ fontSize: 10, fontWeight: 800, padding: '3px 9px', borderRadius: 20, background: 'rgba(245,158,11,0.3)', color: '#FDE68A', border: '1px solid rgba(245,158,11,0.4)', flexShrink: 0 }}>💎 PREMIUM</span>}
+            {activeLink.content_type === 'url' && activeLink.url && <a href={activeLink.url} target="_blank" rel="noopener noreferrer" style={{ padding: '6px 12px', background: 'rgba(255,255,255,0.15)', border: '1px solid rgba(255,255,255,0.25)', borderRadius: 10, color: 'white', fontSize: 13, textDecoration: 'none', flexShrink: 0 }}>↗</a>}
           </div>
-          {iframeLoading && (
-            <div style={{ height: 3, background: '#EEF2FF', flexShrink: 0 }}>
-              <div style={{ height: '100%', background: 'linear-gradient(90deg,#4F46E5,#06B6D4)', animation: 'loadbar 1.5s ease infinite' }} />
-            </div>
-          )}
+          {iframeLoading && <div style={{ height: 3, background: '#EEF2FF', flexShrink: 0 }}><div style={{ height: '100%', background: 'linear-gradient(90deg,#4F46E5,#06B6D4)', animation: 'loadbar 1.5s ease infinite' }} /></div>}
           {activeLink.content_type === 'html'
             ? <iframe ref={iframeRef} srcDoc={activeLink.html_content || ''} style={{ flex: 1, width: '100%', border: 'none', display: 'block' }} title={activeLink.name} onLoad={() => setIframeLoading(false)} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-pointer-lock" />
             : <iframe ref={iframeRef} src={activeLink.url || ''} style={{ flex: 1, width: '100%', border: 'none', display: 'block' }} title={activeLink.name} onLoad={() => setIframeLoading(false)} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-presentation" />}

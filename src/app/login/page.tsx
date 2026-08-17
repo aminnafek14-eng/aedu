@@ -122,7 +122,7 @@ export default function LoginPage() {
           <>
             <div style={S.formGroup}>
               <label style={S.label}>ID Murid</label>
-              <input style={S.input} placeholder="cth: hajarzukri" value={studentId}
+              <input style={S.input} placeholder="cth: ahmadyusof" value={studentId}
                 onChange={e => setStudentId(e.target.value.toLowerCase().split('').filter(c => c !== ' ').join(''))}
                 onKeyDown={e => { if(e.key === ' ') { e.preventDefault(); return; } if(e.key === 'Enter') handleLogin() }} autoComplete="username" />
             </div>

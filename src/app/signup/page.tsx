@@ -37,16 +37,9 @@ export default function SignupPage() {
   // Auto-generate ID from name
   const handleNameChange = (val: string) => {
     setFullName(val.toUpperCase())
-    if (!studentId) {
-      // Auto generate ID: gabung semua perkataan, buang bukan alphanumeric
-      const auto = val.toLowerCase().trim()
-        .split(' ')
-        .filter(w => w.length > 0)
-        .join('')
-        .replace(/[^a-z0-9]/g, '')
-        .slice(0, 12)
-      setStudentId(auto)
-    }
+    // Auto generate ID dari nama PERTAMA sahaja
+    const firstName = val.toLowerCase().trim().split(' ')[0].replace(/[^a-z0-9]/g, '').slice(0, 12)
+    if (firstName) setStudentId(firstName)
   }
 
   const handleFormSubmit = async () => {
@@ -127,13 +120,11 @@ export default function SignupPage() {
 
         <div style={S.formGroup}>
           <label style={S.label}>Kata Laluan</label>
-          <div style={{ position: 'relative' }}>
-            <input style={{ ...S.input, paddingRight: 44 }} type={showPw ? 'text' : 'password'}
-              placeholder="Min 4 aksara" value={password} onChange={e => setPassword(e.target.value)} />
-            <button onClick={() => setShowPw(!showPw)} style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, color: '#94A3B8' }}>
-              {showPw ? '🙈' : '👁️'}
-            </button>
-          </div>
+          <input style={S.input} type="text"
+            placeholder="Min 4 aksara" value={password} onChange={e => setPassword(e.target.value)} />
+          <p style={{ fontSize: 11, color: '#10B981', marginTop: 4, fontWeight: 600 }}>
+            ✨ Kata laluan lalai: <strong>1234</strong> — boleh ditukar mengikut kehendak anda
+          </p>
         </div>
 
         <div style={S.formGroup}>

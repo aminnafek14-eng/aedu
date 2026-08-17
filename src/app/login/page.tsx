@@ -65,16 +65,33 @@ export default function LoginPage() {
     if (!parentPhone.trim()) return setError('Masukkan nombor telefon ibu/bapa')
     setLoading(true); setError('')
 
-    const clean = parentPhone.trim().replace(/\s+/g, '')
-    const { data, error: err } = await supabase
-      .from('students').select('student_id, password, full_name')
-      .eq('parent_phone', clean)
-      .single()
+    // Normalize: buang semua bukan digit, kemudian cuba pelbagai format
+    const raw = parentPhone.trim()
+    const digitsOnly = raw.replace(/[^0-9]/g, '')
 
-    if (err || !data) {
-      setError('Nombor telefon tidak dijumpai. Semak semula.')
+    // Cuba pelbagai format: asal, tanpa spasi, dengan/tanpa +60, 60xxx, 0xxx
+    const variants = Array.from(new Set([
+      raw,
+      raw.replace(/\s+/g, ''),
+      digitsOnly,
+      digitsOnly.startsWith('60') ? '0' + digitsOnly.slice(2) : digitsOnly,
+      digitsOnly.startsWith('0') ? '60' + digitsOnly.slice(1) : digitsOnly,
+      digitsOnly.startsWith('0') ? '+60' + digitsOnly.slice(1) : digitsOnly,
+    ]))
+
+    let found = null
+    for (const v of variants) {
+      const { data } = await supabase
+        .from('students').select('student_id, password, full_name')
+        .eq('parent_phone', v)
+        .maybeSingle()
+      if (data) { found = data; break }
+    }
+
+    if (!found) {
+      setError('Nombor telefon tidak dijumpai. Pastikan nombor yang didaftarkan dimasukkan.')
     } else {
-      setForgotResult(data)
+      setForgotResult(found)
     }
     setLoading(false)
   }

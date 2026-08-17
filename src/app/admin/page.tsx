@@ -1,6 +1,8 @@
 'use client'
 import { useEffect, useState, useRef } from 'react'
-import { supabase, type Folder, type Link, type Banner, type Student } from '@/lib/supabase'
+import { supabase } from '@/lib/supabase'
+import { adminApi, uploadImageAdmin } from '@/lib/adminApi'
+import type { Folder, Link, Banner, Student } from '@/lib/supabase'
 
 type Tab = 'overview' | 'apps' | 'banners' | 'students' | 'subscription' | 'payment'
 const ADMIN_PW = '050505'
@@ -108,7 +110,7 @@ export default function AdminPage() {
   const togglePaymentMode = async () => {
     setTogglingPayment(true)
     const newVal = !paymentRequired
-    await supabase.from('app_settings').upsert({ key: 'payment_required', value: newVal.toString(), updated_at: new Date().toISOString() })
+    await adminApi.upsert('app_settings', { key: 'payment_required', value: newVal.toString(), updated_at: new Date().toISOString() })
     setPaymentRequired(newVal)
     showToast(newVal ? '🔒 Mod Berbayar DIAKTIFKAN' : '🔓 Mod Percuma DIAKTIFKAN', 'success')
     setTogglingPayment(false)
@@ -136,7 +138,7 @@ export default function AdminPage() {
       { key: 'payment_whatsapp', value: paySettings.whatsapp },
     ]
     for (const u of updates) {
-      await supabase.from('app_settings').upsert({ key: u.key, value: u.value, updated_at: new Date().toISOString() })
+      await adminApi.upsert('app_settings', { key: u.key, value: u.value, updated_at: new Date().toISOString() })
     }
     setPaySettings(p => ({ ...p, qrUrl }))
     showToast('Tetapan bayaran disimpan!', 'success')
@@ -144,10 +146,10 @@ export default function AdminPage() {
   }
 
   const toggleStudentSub = async (studentId: string, current: boolean, name: string) => {
-    await supabase.from('students').update({
+    await adminApi.update('students', studentId, {
       is_subscribed: !current,
       subscribed_at: !current ? new Date().toISOString() : null,
-    }).eq('id', studentId)
+    })
     showToast(!current ? `${name} — akses diaktifkan` : `${name} — akses dilumpuhkan`, !current ? 'success' : '')
     loadAll()
   }
@@ -159,7 +161,7 @@ export default function AdminPage() {
     if (!phone) return showToast('Masukkan nombor telefon', 'error')
     const { data: existing } = await supabase.from('students').select('id').eq('full_name', name).single()
     if (existing) return showToast('Nama sudah wujud', 'error')
-    await supabase.from('students').insert({
+    await adminApi.insert('students', {
       full_name: name, parent_phone: phone,
       is_subscribed: true, subscribed_at: new Date().toISOString(),
       subscription_note: newStudentNote || null,
@@ -178,11 +180,11 @@ export default function AdminPage() {
     // Check ID duplicate (exclude current student)
     const { data: existing } = await supabase.from('students').select('id').eq('student_id', editStudentId.trim().toLowerCase()).neq('id', s.id).maybeSingle()
     if (existing) return showToast('ID ini sudah digunakan murid lain', 'error')
-    await supabase.from('students').update({
+    await adminApi.update('students', s.id, {
       student_id: editStudentId.trim().toLowerCase(),
       password: editStudentPw.trim(),
       is_premium: editStudentPremium,
-    }).eq('id', s.id)
+    })
     showToast(`✅ Maklumat ${s.full_name} dikemaskini!`, 'success')
     setEditStudentModal({ open: false, student: null })
     loadAll()
@@ -190,7 +192,7 @@ export default function AdminPage() {
 
   const deleteStudent = async (studentId: string, name: string) => {
     if (!confirm(`⚠️ Padam akaun "${name}"?\n\nTindakan ini tidak boleh dibatalkan.`)) return
-    await supabase.from('students').delete().eq('id', studentId)
+    await adminApi.delete('students', studentId)
     showToast(`Akaun ${name} dipadam 🗑️`)
     loadAll()
   }
@@ -256,13 +258,17 @@ export default function AdminPage() {
   }
 
   const uploadImg = async (dataUrl: string): Promise<string | null> => {
-    const arr = dataUrl.split(','), mime = arr[0].match(/:(.*?);/)![1]
-    const bstr = atob(arr[1]); const u8 = new Uint8Array(bstr.length)
-    for (let i = 0; i < bstr.length; i++) u8[i] = bstr.charCodeAt(i)
-    const blob = new Blob([u8], { type: mime }); const fname = `${Date.now()}.${mime.split('/')[1]}`
-    const { error } = await supabase.storage.from('images').upload(fname, blob)
-    if (error) { showToast('Gagal upload: ' + error.message, 'error'); return null }
-    return supabase.storage.from('images').getPublicUrl(fname).data.publicUrl
+    try {
+      // Convert dataUrl to File, upload via server API (service role)
+      const arr = dataUrl.split(','), mime = arr[0].match(/:(.*?);/)![1]
+      const bstr = atob(arr[1]); const u8 = new Uint8Array(bstr.length)
+      for (let i = 0; i < bstr.length; i++) u8[i] = bstr.charCodeAt(i)
+      const blob = new Blob([u8], { type: mime })
+      const file = new File([blob], `upload.${mime.split('/')[1]}`, { type: mime })
+      return await uploadImageAdmin(file)
+    } catch (e) {
+      showToast('Gagal upload: ' + String(e), 'error'); return null
+    }
   }
 
 
@@ -289,7 +295,7 @@ export default function AdminPage() {
     else if (lImgData) imgUrl = lImgData
     const isEdit = linkModal.linkIdx !== null
     if (!isEdit) {
-      await supabase.from('links').insert({
+      await adminApi.insert('links', {
         folder_id: null, name: lName.trim(),
         url: lContentType === 'url' ? url : null,
         html_content: lContentType === 'html' ? lHtmlContent.trim() : null,
@@ -299,20 +305,20 @@ export default function AdminPage() {
       })
       showToast('Aktiviti ditambah!', 'success')
     } else {
-      await supabase.from('links').update({
+      await adminApi.update('links', linkModal.linkIdx as string, {
         name: lName.trim(),
         url: lContentType === 'url' ? url : null,
         html_content: lContentType === 'html' ? lHtmlContent.trim() : null,
         content_type: lContentType, img_url: imgUrl,
         emoji: lContentType === 'html' ? '🎮' : '🔗', tags: lTags, access_type: lAccessType
-      }).eq('id', linkModal.linkIdx as string)
+      })
       showToast('Aktiviti dikemaskini!', 'success')
     }
     setLinkModal({ open: false, folderIdx: null, linkIdx: null }); loadAll()
   }
   const deleteLink = async (linkId: string, name: string) => {
     if (!confirm(`Padam "${name}"?`)) return
-    await supabase.from('links').delete().eq('id', linkId); showToast('Aktiviti dipadam'); loadAll()
+    await adminApi.delete('links', linkId); showToast('Aktiviti dipadam'); loadAll()
   }
 
   const openAddBanner = () => { setBTitle(''); setBImgData(''); setBLinkUrl(''); setBActive(true); setBannerModal({ open: true, idx: null }) }
@@ -322,17 +328,17 @@ export default function AdminPage() {
     if (bImgData?.startsWith('data:')) imgUrl = await uploadImg(bImgData)
     else if (bImgData) imgUrl = bImgData
     if (bannerModal.idx === null) {
-      await supabase.from('banners').insert({ title: bTitle.trim(), img_url: imgUrl, link_url: bLinkUrl || null, active: bActive, order_num: banners.length })
+      await adminApi.insert('banners', { title: bTitle.trim(), img_url: imgUrl, link_url: bLinkUrl || null, active: bActive, order_num: banners.length })
       showToast('Banner ditambah!', 'success')
     } else {
-      await supabase.from('banners').update({ title: bTitle.trim(), img_url: imgUrl, link_url: bLinkUrl || null, active: bActive }).eq('id', banners[bannerModal.idx].id)
+      await adminApi.update('banners', banners[bannerModal.idx].id, { title: bTitle.trim(), img_url: imgUrl, link_url: bLinkUrl || null, active: bActive })
       showToast('Banner dikemaskini!', 'success')
     }
     setBannerModal({ open: false, idx: null }); loadAll()
   }
   const deleteBanner = async (i: number) => {
     if (!confirm('Padam banner ini?')) return
-    await supabase.from('banners').delete().eq('id', banners[i].id); showToast('Banner dipadam'); loadAll()
+    await adminApi.delete('banners', banners[i].id); showToast('Banner dipadam'); loadAll()
   }
 
   const subscribedCount = students.filter(s => s.is_subscribed).length

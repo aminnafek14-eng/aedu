@@ -15,6 +15,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [paymentRequired, setPaymentRequired] = useState(false)
+  const [forgotResults, setForgotResults] = useState<{ student_id: string; password: string; full_name: string }[]>([])
   const [forgotResult, setForgotResult] = useState<{ student_id: string; password: string; full_name: string } | null>(null)
   const [showPw, setShowPw] = useState(false)
 
@@ -65,33 +66,31 @@ export default function LoginPage() {
     if (!parentPhone.trim()) return setError('Masukkan nombor telefon ibu/bapa')
     setLoading(true); setError('')
 
-    // Normalize: buang semua bukan digit, kemudian cuba pelbagai format
-    const raw = parentPhone.trim()
-    const digitsOnly = raw.replace(/[^0-9]/g, '')
+    const digitsOnly = parentPhone.trim().replace(/[^0-9]/g, '')
 
-    // Cuba pelbagai format: asal, tanpa spasi, dengan/tanpa +60, 60xxx, 0xxx
-    const variants = Array.from(new Set([
-      raw,
-      raw.replace(/\s+/g, ''),
-      digitsOnly,
-      digitsOnly.startsWith('60') ? '0' + digitsOnly.slice(2) : digitsOnly,
-      digitsOnly.startsWith('0') ? '60' + digitsOnly.slice(1) : digitsOnly,
-      digitsOnly.startsWith('0') ? '+60' + digitsOnly.slice(1) : digitsOnly,
-    ]))
+    const { data: allStudents } = await supabase
+      .from('students')
+      .select('student_id, password, full_name, parent_phone')
 
-    let found = null
-    for (const v of variants) {
-      const { data } = await supabase
-        .from('students').select('student_id, password, full_name')
-        .eq('parent_phone', v)
-        .maybeSingle()
-      if (data) { found = data; break }
+    if (!allStudents || allStudents.length === 0) {
+      setError('Tiada murid dalam sistem.')
+      setLoading(false); return
     }
 
-    if (!found) {
+    // Cari SEMUA murid dengan nombor telefon yang sama
+    const matched = allStudents.filter((s: { parent_phone: string }) => {
+      const storedDigits = (s.parent_phone || '').replace(/[^0-9]/g, '')
+      return storedDigits === digitsOnly
+    })
+
+    if (matched.length === 0) {
       setError('Nombor telefon tidak dijumpai. Pastikan nombor yang didaftarkan dimasukkan.')
+    } else if (matched.length === 1) {
+      // Hanya satu murid — terus papar
+      setForgotResult(matched[0] as { student_id: string; password: string; full_name: string })
     } else {
-      setForgotResult(found)
+      // Lebih dari satu murid — tunjuk senarai untuk dipilih
+      setForgotResults(matched as { student_id: string; password: string; full_name: string }[])
     }
     setLoading(false)
   }
@@ -183,6 +182,41 @@ export default function LoginPage() {
           </>
         )}
 
+        {/* FORGOT — PILIH ANAK (bila lebih dari 1) */}
+        {mode === 'forgot' && !forgotResult && forgotResults.length > 1 && (
+          <>
+            <div style={{ background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: 12, padding: '12px 14px', marginBottom: 20, textAlign: 'center' }}>
+              <div style={{ fontSize: 24, marginBottom: 6 }}>👨‍👩‍👧‍👦</div>
+              <div style={{ fontWeight: 700, fontSize: 14, color: '#1E40AF', marginBottom: 4 }}>Nombor ini mempunyai {forgotResults.length} akaun anak</div>
+              <div style={{ fontSize: 12, color: '#3B82F6' }}>Pilih nama anak untuk lihat maklumat log masuk</div>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
+              {forgotResults.map((r, i) => (
+                <button key={i} onClick={() => setForgotResult(r)} style={{
+                  padding: '14px 16px', borderRadius: 12, border: '2px solid #BFDBFE',
+                  background: 'white', cursor: 'pointer', textAlign: 'left',
+                  display: 'flex', alignItems: 'center', gap: 12, transition: 'all 0.15s'
+                }}>
+                  <div style={{ width: 40, height: 40, borderRadius: 10, background: 'linear-gradient(135deg,#4F46E5,#06B6D4)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 900, fontSize: 16, flexShrink: 0 }}>
+                    {r.full_name.charAt(0)}
+                  </div>
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: 14, color: '#0F172A' }}>{r.full_name}</div>
+                    <div style={{ fontSize: 12, color: '#64748B', marginTop: 2 }}>
+                      ID: <span style={{ fontFamily: 'monospace', fontWeight: 700, color: '#4F46E5' }}>{r.student_id || '(belum ditetapkan)'}</span>
+                    </div>
+                  </div>
+                  <div style={{ marginLeft: 'auto', color: '#94A3B8', fontSize: 18 }}>›</div>
+                </button>
+              ))}
+            </div>
+            <button onClick={() => { setForgotResults([]); setParentPhone('') }}
+              style={{ background: 'none', border: 'none', color: '#94A3B8', fontSize: 13, cursor: 'pointer', width: '100%', textAlign: 'center' }}>
+              ← Masukkan nombor lain
+            </button>
+          </>
+        )}
+
         {/* FORGOT RESULT */}
         {mode === 'forgot' && forgotResult && (
           <>
@@ -203,7 +237,7 @@ export default function LoginPage() {
             <button style={S.btn} onClick={() => { setMode('login'); setStudentId(forgotResult.student_id); setError('') }}>
               Log Masuk Sekarang →
             </button>
-            <button onClick={() => { setForgotResult(null); setParentPhone('') }}
+            <button onClick={() => { setForgotResult(null); setForgotResults([]); setParentPhone('') }}
               style={{ background: 'none', border: 'none', color: '#94A3B8', fontSize: 13, cursor: 'pointer', marginTop: 10, width: '100%', textAlign: 'center' }}>
               ← Cari Akaun Lain
             </button>

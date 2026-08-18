@@ -14,15 +14,9 @@ export default function LoginPage() {
   const [parentPhone, setParentPhone] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [paymentRequired, setPaymentRequired] = useState(false)
   const [forgotResults, setForgotResults] = useState<{ student_id: string; password: string; full_name: string }[]>([])
   const [forgotResult, setForgotResult] = useState<{ student_id: string; password: string; full_name: string } | null>(null)
   const [showPw, setShowPw] = useState(false)
-
-  useEffect(() => {
-    supabase.from('app_settings').select('value').eq('key', 'payment_required').single()
-      .then(({ data }) => setPaymentRequired(data?.value === 'true'))
-  }, [])
 
   const handleLogin = async () => {
     if (!studentId.trim()) return setError('Masukkan ID murid')
@@ -42,10 +36,7 @@ export default function LoginPage() {
       setError('Kata laluan salah. Cuba lagi.')
       setLoading(false); return
     }
-    if (paymentRequired && !data.is_subscribed) {
-      setError('⚠️ Akaun belum aktif. Hubungi admin untuk mendapatkan akses.')
-      setLoading(false); return
-    }
+
 
     // Update last_login
     await supabase.from('students').update({ last_login: new Date().toISOString() }).eq('id', data.id)
@@ -110,11 +101,7 @@ export default function LoginPage() {
           <img src="/logo.png" alt="AEdu" style={{ width: 88, height: 88, objectFit: 'contain' }} />
           <h1 style={S.title}>AEdu.my</h1>
           <p style={S.sub}>Portal Gamifikasi Pendidikan</p>
-          {paymentRequired && (
-            <div style={{ display: 'inline-block', background: 'linear-gradient(135deg,#F59E0B,#D97706)', color: 'white', borderRadius: 20, padding: '4px 14px', fontSize: 11, fontWeight: 800, marginTop: 6 }}>
-              ⭐ Platform Premium
-            </div>
-          )}
+
         </div>
 
         {/* LOGIN MODE */}

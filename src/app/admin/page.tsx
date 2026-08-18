@@ -36,6 +36,7 @@ export default function AdminPage() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [students, setStudents] = useState<any[]>([])
   const [paymentRequired, setPaymentRequired] = useState(false)
+  const [paymentRequests, setPaymentRequests] = useState<any[]>([])
   const [togglingPayment, setTogglingPayment] = useState(false)
   const [paySettings, setPaySettings] = useState({
     price: '50', instructions: '', bank: '', accountName: '', accountNumber: '', qrUrl: '', whatsapp: ''
@@ -79,11 +80,12 @@ export default function AdminPage() {
   }
 
   const loadAll = async () => {
-    const [{ data: l }, { data: b }, { data: s }, { data: settings }] = await Promise.all([
+    const [{ data: l }, { data: b }, { data: s }, { data: settings }, { data: pr }] = await Promise.all([
       supabase.from('links').select('*').order('order_num'),
       supabase.from('banners').select('*').order('order_num'),
       supabase.from('students').select('*').order('created_at', { ascending: false }),
       supabase.from('app_settings').select('*').eq('key', 'payment_required').single(),
+      supabase.from('payment_requests').select('*').eq('status','pending').order('created_at', { ascending: false }),
     ])
     setLinks(l || [])
     setBanners(b || []); setStudents(s || [])
@@ -203,6 +205,22 @@ export default function AdminPage() {
     setEditStudentPremium(s.is_premium || false)
     setShowEditPw(false)
     setEditStudentModal({ open: true, student: s })
+  }
+
+  const approvePayment = async (reqId: string, studentId: string, name: string) => {
+    // Activate premium for student
+    await adminApi.update('students', studentId, { is_premium: true, is_subscribed: true, subscribed_at: new Date().toISOString() })
+    // Update request status
+    await adminApi.update('payment_requests', reqId, { status: 'approved', updated_at: new Date().toISOString() })
+    showToast(`✅ ${name} — Premium diaktifkan!`, 'success')
+    loadAll()
+  }
+
+  const rejectPayment = async (reqId: string, name: string) => {
+    if (!confirm(`Tolak permintaan dari ${name}?`)) return
+    await adminApi.update('payment_requests', reqId, { status: 'rejected', updated_at: new Date().toISOString() })
+    showToast(`❌ Permintaan ${name} ditolak`, '')
+    loadAll()
   }
 
   const startPresenceWatch = () => {
@@ -542,6 +560,61 @@ export default function AdminPage() {
                   ))}
               </div>
             </div>
+
+            {/* ── PAYMENT REQUESTS ── */}
+            {paymentRequests.length > 0 && (
+              <div style={{ background: 'white', borderRadius: 16, border: '2px solid #FDE68A', boxShadow: '0 4px 16px rgba(245,158,11,0.15)', marginBottom: 16, overflow: 'hidden' }}>
+                <div style={{ padding: '14px 16px', background: 'linear-gradient(135deg,#FFF7ED,#FFFBEB)', borderBottom: '1px solid #FDE68A', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: 20 }}>💳</span>
+                    <div>
+                      <div style={{ fontFamily: "'Plus Jakarta Sans',sans-serif", fontWeight: 800, fontSize: 14, color: '#92400E' }}>Permintaan Upgrade Premium</div>
+                      <div style={{ fontSize: 11, color: '#B45309', marginTop: 1 }}>Menunggu kelulusan anda</div>
+                    </div>
+                  </div>
+                  <div style={{ background: '#F59E0B', color: 'white', borderRadius: 20, padding: '3px 12px', fontSize: 13, fontWeight: 800 }}>
+                    {paymentRequests.length} pending
+                  </div>
+                </div>
+                <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {paymentRequests.map((req: any) => (
+                    <div key={req.id} style={{ background: '#FFFBEB', borderRadius: 12, border: '1px solid #FDE68A', padding: '12px 14px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+                        <div style={{ width: 40, height: 40, borderRadius: 10, background: 'linear-gradient(135deg,#F59E0B,#D97706)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>👤</div>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontWeight: 700, fontSize: 14, color: '#0F172A' }}>{req.full_name}</div>
+                          <div style={{ fontSize: 11, color: '#92400E', marginTop: 1 }}>
+                            💰 RM{req.amount} • {new Date(req.created_at).toLocaleDateString('ms-MY', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' })}
+                          </div>
+                        </div>
+                      </div>
+                      {req.proof_url && (
+                        <a href={req.proof_url} target="_blank" rel="noopener noreferrer"
+                          style={{ display: 'block', marginBottom: 10 }}>
+                          <img src={req.proof_url} alt="Bukti" style={{ width: '100%', maxHeight: 140, objectFit: 'cover', borderRadius: 10, border: '1px solid #FDE68A' }} />
+                          <div style={{ fontSize: 11, color: '#92400E', marginTop: 4, textAlign: 'center' }}>👆 Klik untuk besar</div>
+                        </a>
+                      )}
+                      {!req.proof_url && (
+                        <div style={{ background: '#FEF3C7', borderRadius: 8, padding: '8px 12px', fontSize: 12, color: '#92400E', marginBottom: 10 }}>
+                          ⚠️ Tiada bukti bayaran dimuat naik
+                        </div>
+                      )}
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <button onClick={() => approvePayment(req.id, req.student_id, req.full_name)}
+                          style={{ flex: 1, padding: '10px', background: 'linear-gradient(135deg,#10B981,#059669)', color: 'white', border: 'none', borderRadius: 10, fontSize: 13, fontWeight: 800, cursor: 'pointer' }}>
+                          ✅ Luluskan & Aktifkan Premium
+                        </button>
+                        <button onClick={() => rejectPayment(req.id, req.full_name)}
+                          style={{ padding: '10px 14px', background: '#FEF2F2', color: '#EF4444', border: '1px solid #FECACA', borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+                          ✕
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Online users list */}
             {onlineNames.length > 0 && (
@@ -959,17 +1032,9 @@ export default function AdminPage() {
               </button>
             </div>
           </FG>
-          <FG label="Status Premium">
-            <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', padding: '10px 14px', borderRadius: 10, border: editStudentPremium ? '2px solid #F59E0B' : '2px solid #E2E8F0', background: editStudentPremium ? '#FFFBEB' : '#F8FAFC', transition: 'all 0.2s' }}>
-              <input type="checkbox" checked={editStudentPremium} onChange={e => setEditStudentPremium(e.target.checked)} style={{ width: 18, height: 18, accentColor: '#F59E0B' }} />
-              <div>
-                <div style={{ fontSize: 13, fontWeight: 700, color: editStudentPremium ? '#D97706' : '#64748B' }}>
-                  {editStudentPremium ? '💎 Akaun Premium' : '○ Akaun Biasa'}
-                </div>
-                <div style={{ fontSize: 11, color: '#94A3B8', marginTop: 2 }}>Murid premium boleh akses semua apps premium</div>
-              </div>
-            </label>
-          </FG>
+          <div style={{ background: '#EEF2FF', border: '1px solid #C7D2FE', borderRadius: 10, padding: '10px 14px', fontSize: 12, color: '#3730A3' }}>
+            💡 Status premium diurus melalui tab <strong>Overview → Permintaan Upgrade</strong>. Admin luluskan bayaran di sana untuk aktifkan premium murid.
+          </div>
           <div style={{ display: 'flex', gap: 8, marginTop: 20 }}>
             <button
               onClick={() => { deleteStudent(editStudentModal.student.id, editStudentModal.student.full_name); setEditStudentModal({ open: false, student: null }) }}

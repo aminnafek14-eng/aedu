@@ -84,7 +84,7 @@ export default function AdminPage() {
       supabase.from('banners').select('*').order('order_num'),
       supabase.from('students').select('*').order('created_at', { ascending: false }),
       Promise.resolve({ data: null }),
-      supabase.from('payment_requests').select('*, students(student_id, is_premium)').eq('status','pending').order('created_at', { ascending: false }),
+      supabase.from('payment_requests').select('*').eq('status','pending').order('created_at', { ascending: false }),
     ])
     setLinks(l || [])
     setBanners(b || []); setStudents(s || [])

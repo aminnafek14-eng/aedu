@@ -79,18 +79,22 @@ export default function AdminPage() {
   }
 
   const loadAll = async () => {
-    const [{ data: l }, { data: b }, { data: s }, { data: settings }, { data: pr }] = await Promise.all([
+    const [{ data: l }, { data: b }, { data: s }, { data: settings }, { data: pr, error: prErr }] = await Promise.all([
       supabase.from('links').select('*').order('order_num'),
       supabase.from('banners').select('*').order('order_num'),
       supabase.from('students').select('*').order('created_at', { ascending: false }),
       Promise.resolve({ data: null }),
       supabase.from('payment_requests').select('*').eq('status','pending').order('created_at', { ascending: false }),
     ])
+    if (prErr) console.error('payment_requests error:', prErr)
+    console.log('payment_requests pending:', pr)
     setLinks(l || [])
     setBanners(b || []); setStudents(s || [])
     setPaymentRequests(pr || [])
     // Load all payment requests (history)
-    const { data: allPr } = await supabase.from('payment_requests').select('*').order('created_at', { ascending: false }).limit(50)
+    const { data: allPr, error: allPrErr } = await supabase.from('payment_requests').select('*').order('created_at', { ascending: false }).limit(50)
+    if (allPrErr) console.error('all payment_requests error:', allPrErr)
+    console.log('all payment_requests:', allPr)
     setAllPaymentRequests(allPr || [])
     {
       const { data: allSettings } = await supabase.from('app_settings').select('key,value')

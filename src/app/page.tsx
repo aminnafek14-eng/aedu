@@ -76,43 +76,44 @@ export default function StudentHome() {
     channelRef.current = { unsubscribe: () => clearInterval(interval) } as any
   }
 
-  // ── MURID: Realtime MINIMUM ──
-  // Hanya 1 channel untuk perubahan kritikal sahaja
-  // Tidak guna Presence — jimat connection limit
+  // ── MURID: POLLING SAHAJA — tiada Realtime WebSocket ──
+  // 500 murid = 0 Realtime connections dari murid
+  // Admin kekal 1 Realtime connection sahaja
   useEffect(() => {
     if (!student) return
 
-    const channel = supabase
-      .channel('aedu_student_' + student.id)
-      // Penting: hanya dengar perubahan pada akaun sendiri (premium on/off)
-      .on('postgres_changes', {
-        event: 'UPDATE',
-        schema: 'public',
-        table: 'students',
-        filter: `id=eq.${student.id}`
-      }, (payload) => {
-        const u = payload.new as any
+    // Poll premium status setiap 30 saat
+    const premiumInterval = setInterval(async () => {
+      const { data } = await supabase
+        .from('students')
+        .select('id, full_name, student_id, is_subscribed, is_premium')
+        .eq('id', student.id)
+        .single()
+      if (data) {
         const newSession = JSON.stringify({
-          id: u.id, full_name: u.full_name,
-          student_id: u.student_id,
-          is_subscribed: u.is_subscribed,
-          is_premium: u.is_premium,
+          id: data.id, full_name: data.full_name,
+          student_id: data.student_id,
+          is_subscribed: data.is_subscribed,
+          is_premium: data.is_premium,
         })
         sessionStorage.setItem('aedu_student', newSession)
         localStorage.setItem('aedu_student', newSession)
-        setStudent({ id: u.id, full_name: u.full_name, student_id: u.student_id, is_subscribed: u.is_subscribed, is_premium: u.is_premium })
-      })
-      .subscribe()
+        // Hanya update state jika ada perubahan
+        if (data.is_premium !== student.is_premium || data.is_subscribed !== student.is_subscribed) {
+          setStudent(data as StudentSession)
+        }
+      }
+    }, 30 * 1000) // 30 saat
 
-    return () => { supabase.removeChannel(channel) }
-  }, [student?.id])
+    // Poll apps & content setiap 5 minit
+    const contentInterval = setInterval(() => {
+      loadData()
+    }, 5 * 60 * 1000) // 5 minit
 
-  // Polling ringan untuk apps & kandungan — tiada Realtime connection tambahan
-  // Semak setiap 5 minit sahaja (bukan setiap 30 saat)
-  useEffect(() => {
-    if (!student) return
-    const interval = setInterval(() => { loadData() }, 5 * 60 * 1000)
-    return () => clearInterval(interval)
+    return () => {
+      clearInterval(premiumInterval)
+      clearInterval(contentInterval)
+    }
   }, [student?.id])
 
   const loadData = async () => {

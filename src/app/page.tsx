@@ -75,7 +75,7 @@ export default function StudentHome() {
     if (!student) return
 
     const channel = supabase
-      .channel('aedu_student_realtime')
+      .channel('aedu_student_realtime_' + student.id)
       // Update apps bila admin tambah/ubah/padam
       .on('postgres_changes', { event: '*', schema: 'public', table: 'links' },
         () => { loadData() }
@@ -84,16 +84,46 @@ export default function StudentHome() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'banners' },
         () => { loadData() }
       )
-      // Update akaun murid sendiri (premium status, dll)
+      // Update akaun murid sendiri — REALTIME premium/subscription changes
       .on('postgres_changes', {
         event: 'UPDATE', schema: 'public', table: 'students',
         filter: `id=eq.${student.id}`
       },
-        () => { refreshStudentSession(student.id) }
+        (payload) => {
+          const updated = payload.new as any
+          console.log('Student updated realtime:', updated)
+          const newSession = JSON.stringify({
+            id: updated.id,
+            full_name: updated.full_name,
+            student_id: updated.student_id,
+            is_subscribed: updated.is_subscribed,
+            is_premium: updated.is_premium,
+          })
+          sessionStorage.setItem('aedu_student', newSession)
+          localStorage.setItem('aedu_student', newSession)
+          setStudent({
+            id: updated.id,
+            full_name: updated.full_name,
+            student_id: updated.student_id,
+            is_subscribed: updated.is_subscribed,
+            is_premium: updated.is_premium,
+          })
+        }
       )
-      .subscribe()
+      .subscribe((status) => {
+        console.log('Student realtime status:', status)
+      })
 
     return () => { supabase.removeChannel(channel) }
+  }, [student?.id])
+
+  // Polling fallback — semak setiap 30 saat jika realtime tidak aktif
+  useEffect(() => {
+    if (!student) return
+    const interval = setInterval(() => {
+      refreshStudentSession(student.id)
+    }, 30000) // 30 saat
+    return () => clearInterval(interval)
   }, [student?.id])
 
   const loadData = async () => {

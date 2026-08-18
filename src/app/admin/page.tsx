@@ -88,6 +88,10 @@ export default function AdminPage() {
     ])
     setLinks(l || [])
     setBanners(b || []); setStudents(s || [])
+    setPaymentRequests(pr || [])
+    // Load all payment requests (history)
+    const { data: allPr } = await supabase.from('payment_requests').select('*').order('created_at', { ascending: false }).limit(50)
+    setAllPaymentRequests(allPr || [])
     {
       const { data: allSettings } = await supabase.from('app_settings').select('key,value')
       if (allSettings) {

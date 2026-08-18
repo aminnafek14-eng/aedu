@@ -62,17 +62,18 @@ export default function StudentHome() {
     return () => { channelRef.current?.unsubscribe(); clearTimeout(timeout) }
   }, [])
 
-  // Ganti Presence dengan last_seen ping — jauh lebih ringan
-  // Tidak guna Realtime connection langsung untuk murid
+  // Heartbeat: update last_seen setiap 2 minit
+  // Tiada WebSocket — hanya HTTP request biasa
   const startHeartbeat = (s: StudentSession) => {
     const ping = async () => {
-      await supabase.from('students')
+      const { error } = await supabase
+        .from('students')
         .update({ last_seen: new Date().toISOString() })
         .eq('id', s.id)
+      if (error) console.error('Heartbeat error:', error)
     }
-    ping() // ping terus bila masuk
-    // Ping setiap 2 minit sahaja — sangat ringan
-    const interval = setInterval(ping, 2 * 60 * 1000)
+    ping() // terus ping bila login
+    const interval = setInterval(ping, 2 * 60 * 1000) // setiap 2 minit
     channelRef.current = { unsubscribe: () => clearInterval(interval) } as any
   }
 

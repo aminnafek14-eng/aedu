@@ -46,6 +46,7 @@ export default function AdminPage() {
   // Realtime presence
   const [online, setOnline] = useState(0)
   const [onlineNames, setOnlineNames] = useState<string[]>([])
+  const [onlineCount, setOnlineCount] = useState(0)
   const presenceRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
   const [chartPts, setChartPts] = useState<number[]>(Array(20).fill(0))
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -233,23 +234,27 @@ export default function AdminPage() {
   }
 
   const startPresenceWatch = () => {
-    presenceRef.current?.unsubscribe()
-    const ch = supabase.channel('aedu_presence')
-    ch.on('presence', { event: 'sync' }, () => {
-      const state = ch.presenceState<{ full_name: string; user_id: string }>()
-      const users = Object.values(state).flat()
-      setOnline(users.length); setOnlineNames(users.map(u => u.full_name))
-      setChartPts(prev => [...prev.slice(1), users.length])
-    })
-    ch.on('presence', { event: 'join' }, ({ newPresences }) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      newPresences.forEach((p: any) => addLog(`${p.full_name || 'Pengguna'} menyertai`, 'join'))
-    })
-    ch.on('presence', { event: 'leave' }, ({ leftPresences }) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      leftPresences.forEach((p: any) => addLog(`${p.full_name || 'Pengguna'} keluar`, 'leave'))
-    })
-    ch.subscribe(); presenceRef.current = ch
+    // Guna last_seen timestamp — tiada Presence connection diperlukan
+    // Kira murid online = last_seen dalam 5 minit lepas
+    const countOnline = async () => {
+      const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString()
+      const { data } = await supabase
+        .from('students')
+        .select('id, full_name, last_seen')
+        .gte('last_seen', fiveMinAgo)
+        .order('last_seen', { ascending: false })
+      const count = data?.length || 0
+      const names = data?.map((s: any) => s.full_name) || []
+      if (count !== online) {
+        setOnline(count)
+        setOnlineNames(names)
+        setChartPts(prev => [...prev.slice(1), count])
+      }
+    }
+    countOnline()
+    // Poll setiap 30 saat — sangat ringan, tiada WebSocket
+    const interval = setInterval(countOnline, 30 * 1000)
+    presenceRef.current = { unsubscribe: () => clearInterval(interval) } as any
   }
 
   useEffect(() => { return () => { presenceRef.current?.unsubscribe() } }, [])

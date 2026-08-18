@@ -18,17 +18,16 @@ export default function SignupPage() {
   const [phone, setPhone] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [paymentRequired, setPaymentRequired] = useState(false)
   const [payInfo, setPayInfo] = useState<PayInfo>({ price: '50', instructions: '', bank: '', accountName: '', accountNumber: '', qrUrl: '', whatsapp: '' })
   const [showPw, setShowPw] = useState(false)
   const [uploadedProof, setUploadedProof] = useState('')
 
   useEffect(() => {
+    // Load payment info for upgrade flow
     supabase.from('app_settings').select('key,value').then(({ data }) => {
       if (data) {
         const m: Record<string, string> = {}
         data.forEach((d: { key: string; value: string }) => { m[d.key] = d.value })
-        setPaymentRequired(m['payment_required'] === 'true')
         setPayInfo({ price: m['payment_price'] || '50', instructions: m['payment_instructions'] || '', bank: m['payment_bank'] || '', accountName: m['payment_account_name'] || '', accountNumber: m['payment_account_number'] || '', qrUrl: m['payment_qr_url'] || '', whatsapp: m['payment_whatsapp'] || '' })
       }
     })
@@ -63,8 +62,7 @@ export default function SignupPage() {
     if (existName) { setLoading(false); return setError('Nama ini sudah berdaftar.') }
 
     setLoading(false)
-    if (paymentRequired) { setStep('payment') }
-    else { await registerStudent(name, id, phoneClean, false) }
+    await registerStudent(name, id, phoneClean, false)
   }
 
   const registerStudent = async (name: string, id: string, phoneClean: string, withPayment: boolean) => {
@@ -90,18 +88,10 @@ export default function SignupPage() {
         <div style={{ textAlign: 'center', marginBottom: 22 }}>
           <img src="/logo.png" alt="AEdu" style={{ width: 72, height: 72, objectFit: 'contain' }} />
           <h1 style={S.title}>Daftar Akaun</h1>
-          <p style={S.sub}>{paymentRequired ? `Akses Lifetime • RM${payInfo.price}` : 'Percuma — Daftar Sekarang!'}</p>
+          <p style={S.sub}>'Daftar percuma — Akses premium tersedia dalam apps!'</p>
         </div>
 
-        {paymentRequired && (
-          <div style={{ display: 'flex', alignItems: 'center', background: 'linear-gradient(135deg,#FFF7ED,#FFFBEB)', border: '1px solid #FDE68A', borderRadius: 14, padding: '12px 16px', marginBottom: 18 }}>
-            <div style={{ fontFamily: "'Plus Jakarta Sans',sans-serif", fontSize: 26, fontWeight: 900, color: '#D97706', background: '#FEF3C7', borderRadius: 10, padding: '5px 12px', flexShrink: 0 }}>RM{payInfo.price}</div>
-            <div style={{ marginLeft: 12 }}>
-              <div style={{ fontWeight: 800, fontSize: 13, color: '#1E293B' }}>Akses Lifetime</div>
-              <div style={{ fontSize: 12, color: '#64748B', marginTop: 1 }}>Bayar sekali, guna selamanya ✨</div>
-            </div>
-          </div>
-        )}
+
 
         <div style={S.formGroup}>
           <label style={S.label}>Nama Penuh Murid</label>
@@ -145,7 +135,7 @@ export default function SignupPage() {
 
         {error && <div style={S.err}>{error}</div>}
         <button style={{ ...S.btn, opacity: loading ? 0.7 : 1 }} onClick={handleFormSubmit} disabled={loading}>
-          {loading ? 'Menyemak...' : paymentRequired ? 'Teruskan ke Pembayaran →' : 'Daftar Sekarang →'}
+          {loading ? 'Menyemak...' : 'Daftar Sekarang →'}
         </button>
         <div style={{ margin: '14px 0 10px', fontSize: 12, color: '#94A3B8', textAlign: 'center' }}><span>Sudah ada akaun?</span></div>
         <Link href="/login" style={{ display: 'block', padding: '12px', background: '#F1F5F9', color: '#4F46E5', borderRadius: 12, fontSize: 14, fontWeight: 700, textDecoration: 'none', border: '1px solid #E2E8F0', textAlign: 'center' }}>Log Masuk</Link>

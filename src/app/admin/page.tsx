@@ -703,10 +703,25 @@ export default function AdminPage() {
                   {(links as any[]).map((l: any) => {
                     const tags: string[] = l.tags || []
                     return (
-                      <div key={l.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 12, border: '1px solid #E2E8F0', background: 'white' }}>
-                        <Thumb img={l.img_url} emoji={l.content_type === 'html' ? '🎮' : '🔗'} size={44} radius={12} />
+                      <div key={l.id} style={{
+                        display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px',
+                        borderRadius: 12,
+                        border: l.access_type === 'premium' ? '2px solid #FDE68A' : '1px solid #E2E8F0',
+                        background: l.access_type === 'premium' ? 'linear-gradient(135deg,#FFFBEB,#FFF7ED)' : 'white',
+                      }}>
+                        <div style={{ position: 'relative', flexShrink: 0 }}>
+                          <Thumb img={l.img_url} emoji={l.content_type === 'html' ? '🎮' : '🔗'} size={44} radius={12} />
+                          {l.access_type === 'premium' && (
+                            <div style={{ position: 'absolute', top: -4, right: -4, background: 'linear-gradient(135deg,#F59E0B,#D97706)', borderRadius: '50%', width: 18, height: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, boxShadow: '0 2px 4px rgba(245,158,11,0.4)' }}>💎</div>
+                          )}
+                        </div>
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 13, fontWeight: 700, color: '#0F172A', marginBottom: 4 }}>{l.name}</div>
+                          <div style={{ fontSize: 13, fontWeight: 700, color: '#0F172A', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
+                            {l.name}
+                            {l.access_type === 'premium' && (
+                              <span style={{ fontSize: 9, fontWeight: 900, padding: '2px 7px', borderRadius: 20, background: 'linear-gradient(135deg,#F59E0B,#D97706)', color: 'white', letterSpacing: '0.05em', flexShrink: 0 }}>PREMIUM</span>
+                            )}
+                          </div>
                           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
                             <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 20, background: l.content_type === 'html' ? '#EEF2FF' : '#F0FDF4', color: l.content_type === 'html' ? '#4F46E5' : '#10B981', border: `1px solid ${l.content_type === 'html' ? '#C7D2FE' : '#BBF7D0'}` }}>
                               {l.content_type === 'html' ? 'HTML' : 'LINK'}

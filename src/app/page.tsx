@@ -514,10 +514,12 @@ export default function StudentHome() {
                   <button onClick={async () => {
                     if (!student) return
                     // Submit payment request
+                    const { data: studentData } = await supabase
+                      .from('students').select('parent_phone').eq('id', student.id).single()
                     await supabase.from('payment_requests').insert({
                       student_id: student.id,
                       full_name: student.full_name,
-                      parent_phone: '',
+                      parent_phone: studentData?.parent_phone || '',
                       amount: payInfo.price,
                       proof_url: proofUrl || null,
                       status: 'pending',

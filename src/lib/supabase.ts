@@ -2,18 +2,25 @@ import { createClient } from '@supabase/supabase-js'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-// Service role key - only available server-side, never exposed to browser
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 
-// ── CLIENT untuk murid (anon key) ──
-// RLS akan enforce: premium links hanya untuk premium students
-export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+// ── CLIENT untuk murid (anon key) — guna dalam browser ──
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    storageKey: 'aedu-anon',
+    autoRefreshToken: false,
+    persistSession: false,
+  }
+})
 
-// ── CLIENT untuk admin (service role key) ──
-// Bypass RLS sepenuhnya — HANYA guna di server-side atau admin panel
-// Service role key TIDAK dedahkan kepada browser murid
+// ── CLIENT untuk admin (service role) — HANYA guna dalam server API routes ──
+// Key ini TIDAK pernah sampai ke browser
 export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
-  auth: { autoRefreshToken: false, persistSession: false }
+  auth: {
+    storageKey: 'aedu-admin',
+    autoRefreshToken: false,
+    persistSession: false,
+  }
 })
 
 export type Folder = {

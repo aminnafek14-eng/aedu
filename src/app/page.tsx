@@ -70,6 +70,32 @@ export default function StudentHome() {
     channelRef.current = ch
   }
 
+  // ── REALTIME: update data murid tanpa refresh ──
+  useEffect(() => {
+    if (!student) return
+
+    const channel = supabase
+      .channel('aedu_student_realtime')
+      // Update apps bila admin tambah/ubah/padam
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'links' },
+        () => { loadData() }
+      )
+      // Update banner
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'banners' },
+        () => { loadData() }
+      )
+      // Update akaun murid sendiri (premium status, dll)
+      .on('postgres_changes', {
+        event: 'UPDATE', schema: 'public', table: 'students',
+        filter: `id=eq.${student.id}`
+      },
+        () => { refreshStudentSession(student.id) }
+      )
+      .subscribe()
+
+    return () => { supabase.removeChannel(channel) }
+  }, [student?.id])
+
   const loadData = async () => {
     const [{ data: l }, { data: b }, { data: settings }] = await Promise.all([
       supabase.from('links').select('*').order('order_num'),
@@ -92,6 +118,24 @@ export default function StudentHome() {
       })
     }
     setLoading(false)
+  }
+
+  const refreshStudentSession = async (studentId: string) => {
+    // Refresh student data dari DB (premium status, subscription dll)
+    const { data } = await supabase.from('students')
+      .select('id, full_name, student_id, is_subscribed, is_premium')
+      .eq('id', studentId).single()
+    if (data) {
+      const updated = JSON.stringify({
+        id: data.id, full_name: data.full_name,
+        student_id: data.student_id,
+        is_subscribed: data.is_subscribed,
+        is_premium: data.is_premium,
+      })
+      sessionStorage.setItem('aedu_student', updated)
+      localStorage.setItem('aedu_student', updated)
+      setStudent(data as StudentSession)
+    }
   }
 
   useEffect(() => {

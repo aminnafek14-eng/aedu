@@ -4,7 +4,7 @@ import { supabase } from '@/lib/supabase'
 import { adminApi, uploadImageAdmin } from '@/lib/adminApi'
 import type { Folder, Link, Banner, Student } from '@/lib/supabase'
 
-type Tab = 'overview' | 'apps' | 'banners' | 'students' | 'subscription' | 'payment'
+type Tab = 'overview' | 'apps' | 'banners' | 'students' | 'payment'
 const ADMIN_PW = '050505'
 
 // Lucide-style SVG icons (inline, no dependency)
@@ -35,9 +35,7 @@ export default function AdminPage() {
   const [banners, setBanners] = useState<Banner[]>([])
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [students, setStudents] = useState<any[]>([])
-  const [paymentRequired, setPaymentRequired] = useState(false)
   const [paymentRequests, setPaymentRequests] = useState<any[]>([])
-  const [togglingPayment, setTogglingPayment] = useState(false)
   const [paySettings, setPaySettings] = useState({
     price: '50', instructions: '', bank: '', accountName: '', accountNumber: '', qrUrl: '', whatsapp: ''
   })
@@ -84,12 +82,11 @@ export default function AdminPage() {
       supabase.from('links').select('*').order('order_num'),
       supabase.from('banners').select('*').order('order_num'),
       supabase.from('students').select('*').order('created_at', { ascending: false }),
-      supabase.from('app_settings').select('*').eq('key', 'payment_required').single(),
+      Promise.resolve({ data: null }),
       supabase.from('payment_requests').select('*').eq('status','pending').order('created_at', { ascending: false }),
     ])
     setLinks(l || [])
     setBanners(b || []); setStudents(s || [])
-    setPaymentRequired(settings?.value === 'true')
     {
       const { data: allSettings } = await supabase.from('app_settings').select('key,value')
       if (allSettings) {
@@ -109,14 +106,7 @@ export default function AdminPage() {
     }
   }
 
-  const togglePaymentMode = async () => {
-    setTogglingPayment(true)
-    const newVal = !paymentRequired
-    await adminApi.upsert('app_settings', { key: 'payment_required', value: newVal.toString(), updated_at: new Date().toISOString() })
-    setPaymentRequired(newVal)
-    showToast(newVal ? '🔒 Mod Berbayar DIAKTIFKAN' : '🔓 Mod Percuma DIAKTIFKAN', 'success')
-    setTogglingPayment(false)
-  }
+
 
   const savePaySettings = async () => {
     setSavingPaySettings(true)
@@ -205,6 +195,16 @@ export default function AdminPage() {
     setEditStudentPremium(s.is_premium || false)
     setShowEditPw(false)
     setEditStudentModal({ open: true, student: s })
+  }
+
+  const togglePremium = async (studentId: string, current: boolean, name: string) => {
+    await adminApi.update('students', studentId, {
+      is_premium: !current,
+      is_subscribed: !current ? true : false,
+      subscribed_at: !current ? new Date().toISOString() : null,
+    })
+    showToast(!current ? `💎 ${name} — Premium diaktifkan!` : `${name} — Premium dilumpuhkan`, !current ? 'success' : '')
+    loadAll()
   }
 
   const approvePayment = async (reqId: string, studentId: string, name: string) => {
@@ -403,7 +403,7 @@ export default function AdminPage() {
     { key: 'apps', label: 'Aktiviti', icon: Icons.link },
     { key: 'banners', label: 'Banner', icon: Icons.banners },
     { key: 'students', label: 'Murid', icon: Icons.students },
-    { key: 'subscription', label: 'Langganan', icon: Icons.subscription },
+
     { key: 'payment', label: 'Bayaran', icon: Icons.payment },
   ]
 
@@ -457,9 +457,7 @@ export default function AdminPage() {
             }}>
               <span style={{ color: tab === t.key ? '#4F46E5' : '#94A3B8', display: 'flex' }}>{t.icon}</span>
               {t.label}
-              {t.key === 'subscription' && paymentRequired && (
-                <span style={{ marginLeft: 'auto', fontSize: 9, fontWeight: 800, background: '#4F46E5', color: 'white', padding: '2px 7px', borderRadius: 20 }}>ON</span>
-              )}
+
             </button>
           ))}
         </nav>
@@ -521,7 +519,7 @@ export default function AdminPage() {
               {[
                 { label: 'Dalam Talian', val: online, sub: 'pengguna aktif', color: '#6366F1', bg: '#EEF2FF', live: true },
                 { label: 'Murid Daftar', val: students.length, sub: 'jumlah keseluruhan', color: '#0EA5E9', bg: '#E0F2FE', live: false },
-                { label: 'Akses Aktif', val: subscribedCount, sub: paymentRequired ? 'mod berbayar' : 'mod percuma', color: '#10B981', bg: '#ECFDF5', live: false },
+                { label: 'Akses Aktif', val: subscribedCount, sub: 'murid berlangganan', color: '#10B981', bg: '#ECFDF5', live: false },
                 { label: 'Aktiviti', val: links.length, sub: 'jumlah aktiviti', color: '#F59E0B', bg: '#FFFBEB', live: false },
               ].map(s => (
                 <div key={s.label} className="stat-card" style={{ background: 'white', borderRadius: 16, padding: '18px', border: '1px solid #F1F5F9', boxShadow: '0 2px 8px rgba(0,0,0,0.05)', transition: 'all 0.2s' }}>
@@ -737,80 +735,36 @@ export default function AdminPage() {
                       {diffDays !== null && diffDays > 30 && <span style={{ fontSize: 9, fontWeight: 700, background: '#FEF2F2', color: '#EF4444', padding: '1px 7px', borderRadius: 20, marginLeft: 'auto' }}>Tidak aktif &gt;30 hari</span>}
                       {!s.student_id && <span style={{ fontSize: 9, fontWeight: 700, background: '#FFF7ED', color: '#F59E0B', padding: '1px 7px', borderRadius: 20, marginLeft: 'auto' }}>Perlu set ID & password</span>}
                     </div>
+                    {/* Row 3: Premium toggle */}
+                    <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid #F1F5F9', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ fontSize: 16 }}>💎</span>
+                        <div>
+                          <div style={{ fontSize: 12, fontWeight: 700, color: s.is_premium ? '#D97706' : '#94A3B8' }}>
+                            {s.is_premium ? 'Premium Aktif' : 'Akaun Biasa'}
+                          </div>
+                          <div style={{ fontSize: 10, color: '#94A3B8' }}>
+                            {s.is_premium ? 'Boleh akses semua apps premium' : 'Hanya apps percuma sahaja'}
+                          </div>
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                        <span style={{ fontSize: 10, fontWeight: 700, color: s.is_premium ? '#D97706' : '#94A3B8' }}>
+                          {s.is_premium ? 'PREMIUM' : 'FREE'}
+                        </span>
+                        <div onClick={() => togglePremium(s.id, s.is_premium, s.full_name)}
+                          style={{ width: 46, height: 25, borderRadius: 13, background: s.is_premium ? 'linear-gradient(135deg,#F59E0B,#D97706)' : '#E2E8F0', position: 'relative', cursor: 'pointer', transition: 'background 0.3s', flexShrink: 0, boxShadow: s.is_premium ? '0 0 0 3px rgba(245,158,11,0.2)' : 'none' }}>
+                          <span style={{ position: 'absolute', top: 3, left: s.is_premium ? 24 : 3, width: 19, height: 19, borderRadius: '50%', background: 'white', transition: 'left 0.3s', boxShadow: '0 1px 4px rgba(0,0,0,0.2)', display: 'block' }} />
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 )
               })}
           </Section>
         )}
 
-        {/* SUBSCRIPTION */}
-        {tab === 'subscription' && (
-          <>
-            {/* Toggle card */}
-            <div style={{ background: 'white', borderRadius: 16, border: '1px solid #E2E8F0', padding: '20px', marginBottom: 14, boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-                <div>
-                  <div style={{ fontFamily: "'Plus Jakarta Sans',sans-serif", fontWeight: 800, fontSize: 15, color: '#0F172A', marginBottom: 3 }}>
-                    {paymentRequired ? '🔒 Mod Berbayar' : '🔓 Mod Percuma'}
-                  </div>
-                  <div style={{ fontSize: 12, color: '#64748B' }}>
-                    {paymentRequired ? 'Hanya murid dengan akses aktif boleh log masuk' : 'Semua murid berdaftar boleh log masuk'}
-                  </div>
-                </div>
-                <Toggle on={paymentRequired} onToggle={togglePaymentMode} disabled={togglingPayment} />
-              </div>
-              <div style={{ background: paymentRequired ? '#FFFBEB' : '#F0FDF4', border: `1px solid ${paymentRequired ? '#FDE68A' : '#BBF7D0'}`, borderRadius: 10, padding: '10px 14px', fontSize: 12, color: paymentRequired ? '#92400E' : '#14532D' }}>
-                {paymentRequired ? '⚠️ Murid yang belum diaktifkan tidak boleh log masuk.' : '✅ Semua murid berdaftar boleh masuk tanpa perlu diaktifkan.'}
-              </div>
-            </div>
 
-            {/* Stats */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 14 }}>
-              {[
-                { label: 'Jumlah Daftar', val: students.length, color: '#4F46E5' },
-                { label: 'Akses Aktif', val: subscribedCount, color: '#10B981' },
-                { label: 'Belum Aktif', val: students.length - subscribedCount, color: '#EF4444' },
-              ].map(s => (
-                <div key={s.label} style={{ background: 'white', borderRadius: 12, padding: '14px', border: '1px solid #E2E8F0', textAlign: 'center' }}>
-                  <div style={{ fontFamily: "'Plus Jakarta Sans',sans-serif", fontSize: 26, fontWeight: 900, color: s.color }}>{s.val}</div>
-                  <div style={{ fontSize: 10, color: '#94A3B8', marginTop: 3, fontWeight: 600 }}>{s.label}</div>
-                </div>
-              ))}
-            </div>
-
-            {/* Student list with toggles */}
-            <Section title="Urus Akses Murid" action={<BtnAdd onClick={() => setAddStudentModal(true)}>{Icons.plus} Tambah</BtnAdd>}>
-              <input style={{ width: '100%', padding: '10px 12px', border: '1.5px solid #E2E8F0', borderRadius: 10, fontSize: 13, outline: 'none', marginBottom: 10, background: '#F8FAFC' }}
-                placeholder="🔍 Cari nama atau nombor telefon..." value={subSearch} onChange={e => setSubSearch(e.target.value)} />
-              {filteredStudents.length === 0
-                ? <Empty msg="Tiada murid ditemui" />
-                : filteredStudents.map(s => (
-                  <div key={s.id} style={{
-                    display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px',
-                    borderRadius: 12, border: `1px solid ${s.is_subscribed ? '#BBF7D0' : '#E2E8F0'}`,
-                    background: s.is_subscribed ? '#F0FDF4' : 'white', marginBottom: 6, transition: 'all 0.2s'
-                  }}>
-                    <div style={{
-                      width: 40, height: 40, borderRadius: 12, flexShrink: 0,
-                      background: s.is_subscribed ? 'linear-gradient(135deg,#10B981,#059669)' : 'linear-gradient(135deg,#94A3B8,#64748B)',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, fontWeight: 800, color: 'white'
-                    }}>{s.full_name.charAt(0)}</div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 13, fontWeight: 700 }}>{s.full_name}</div>
-                      <div style={{ fontSize: 11, color: '#64748B', marginTop: 1 }}>📞 {s.parent_phone}</div>
-                      {s.subscription_note && <div style={{ fontSize: 10, color: '#6366F1', marginTop: 2, fontWeight: 600 }}>📝 {s.subscription_note}</div>}
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, flexShrink: 0 }}>
-                      <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: '0.06em', color: s.is_subscribed ? '#10B981' : '#94A3B8', textTransform: 'uppercase' }}>
-                        {s.is_subscribed ? 'AKTIF' : 'TIDAK AKTIF'}
-                      </span>
-                      <Toggle on={s.is_subscribed} onToggle={() => toggleStudentSub(s.id, s.is_subscribed, s.full_name)} />
-                    </div>
-                  </div>
-                ))}
-            </Section>
-          </>
-        )}
 
         {/* PAYMENT */}
         {tab === 'payment' && (
@@ -819,14 +773,7 @@ export default function AdminPage() {
               {Icons.save} {savingPaySettings ? 'Menyimpan...' : 'Simpan'}
             </button>
           }>
-            {/* Payment mode toggle */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', background: paymentRequired ? '#FFFBEB' : '#F0FDF4', borderRadius: 12, border: `1px solid ${paymentRequired ? '#FDE68A' : '#BBF7D0'}`, marginBottom: 16 }}>
-              <div>
-                <div style={{ fontWeight: 700, fontSize: 13 }}>{paymentRequired ? '🔒 Mod Berbayar Aktif' : '🔓 Mod Percuma Aktif'}</div>
-                <div style={{ fontSize: 11, color: '#64748B', marginTop: 2 }}>{paymentRequired ? 'Pengguna perlu bayar untuk daftar' : 'Pengguna boleh daftar percuma'}</div>
-              </div>
-              <Toggle on={paymentRequired} onToggle={togglePaymentMode} />
-            </div>
+
 
             {/* Price */}
             <FG label="Harga (RM)">

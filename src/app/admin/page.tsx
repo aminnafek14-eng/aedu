@@ -234,25 +234,22 @@ export default function AdminPage() {
   }
 
   const startPresenceWatch = () => {
-    // Guna last_seen timestamp — tiada Presence connection diperlukan
-    // Kira murid online = last_seen dalam 5 minit lepas
     const countOnline = async () => {
+      // Kira murid yang last_seen dalam 5 minit lepas
       const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString()
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('students')
         .select('id, full_name, last_seen')
         .gte('last_seen', fiveMinAgo)
         .order('last_seen', { ascending: false })
+      if (error) { console.error('last_seen error:', error); return }
       const count = data?.length || 0
-      const names = data?.map((s: any) => s.full_name) || []
-      if (count !== online) {
-        setOnline(count)
-        setOnlineNames(names)
-        setChartPts(prev => [...prev.slice(1), count])
-      }
+      const names = (data || []).map((s: any) => s.full_name)
+      setOnline(count)
+      setOnlineNames(names)
+      setChartPts(prev => [...prev.slice(1), count])
     }
     countOnline()
-    // Poll setiap 30 saat — sangat ringan, tiada WebSocket
     const interval = setInterval(countOnline, 30 * 1000)
     presenceRef.current = { unsubscribe: () => clearInterval(interval) } as any
   }

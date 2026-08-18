@@ -41,6 +41,12 @@ export default function StudentHome() {
   const [filterSubject, setFilterSubject] = useState('Semua')
   const [filterYear, setFilterYear] = useState('Semua')
   const [activeLink, setActiveLink] = useState<LinkItem | null>(null)
+  const [upgradeTarget, setUpgradeTarget] = useState<LinkItem | null>(null)
+  const [upgradeStep, setUpgradeStep] = useState<'ad'|'payment'>('ad')
+  const [payInfo, setPayInfo] = useState({ price: '50', bank: '', accountName: '', accountNumber: '', qrUrl: '', whatsapp: '', instructions: '' })
+  const [proofUrl, setProofUrl] = useState('')
+  const [uploadingProof, setUploadingProof] = useState(false)
+  const [paymentSubmitted, setPaymentSubmitted] = useState(false)
   const [iframeLoading, setIframeLoading] = useState(false)
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
   const iframeRef = useRef<HTMLIFrameElement>(null)
@@ -65,12 +71,26 @@ export default function StudentHome() {
   }
 
   const loadData = async () => {
-    const [{ data: l }, { data: b }] = await Promise.all([
+    const [{ data: l }, { data: b }, { data: settings }] = await Promise.all([
       supabase.from('links').select('*').order('order_num'),
       supabase.from('banners').select('*').eq('active', true).order('order_num'),
+      supabase.from('app_settings').select('key,value'),
     ])
     setAllLinks((l || []) as LinkItem[])
     setBanners(b || [])
+    if (settings) {
+      const m: Record<string,string> = {}
+      settings.forEach((s: {key:string;value:string}) => { m[s.key] = s.value })
+      setPayInfo({
+        price: m['payment_price'] || '50',
+        bank: m['payment_bank'] || '',
+        accountName: m['payment_account_name'] || '',
+        accountNumber: m['payment_account_number'] || '',
+        qrUrl: m['payment_qr_url'] || '',
+        whatsapp: m['payment_whatsapp'] || '',
+        instructions: m['payment_instructions'] || '',
+      })
+    }
     setLoading(false)
   }
 
@@ -283,7 +303,7 @@ export default function StudentHome() {
 
                 return (
                   <div key={l.id} className="app-card" onClick={() => {
-                    if (!accessible) return
+                    if (!accessible) { setUpgradeTarget(l); return }
                     setIframeLoading(true); setActiveLink(l)
                   }} style={{ cursor: accessible ? 'pointer' : 'not-allowed', animationDelay: `${li * 0.05}s`, opacity: accessible ? 1 : 0.75 }}>
                     <div style={{ background: 'white', borderRadius: 20, overflow: 'hidden', boxShadow: `0 6px 24px ${color.shadow}`, position: 'relative' }}>
@@ -305,9 +325,9 @@ export default function StudentHome() {
 
                         {/* Lock overlay for premium if not accessible */}
                         {!accessible && (
-                          <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(2px)' }}>
-                            <div style={{ fontSize: 28, marginBottom: 4 }}>🔒</div>
-                            <div style={{ color: 'white', fontSize: 10, fontWeight: 800, textAlign: 'center', padding: '0 8px' }}>PREMIUM</div>
+                          <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(135deg,rgba(79,70,229,0.7),rgba(124,58,237,0.8))', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(3px)' }}>
+                            <div style={{ fontSize: 26, marginBottom: 4, filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.3))' }}>🔒</div>
+                            <div style={{ color: 'white', fontSize: 9, fontWeight: 900, textAlign: 'center', background: 'rgba(255,255,255,0.2)', padding: '2px 8px', borderRadius: 20 }}>PREMIUM</div>
                           </div>
                         )}
                       </div>
@@ -340,6 +360,214 @@ export default function StudentHome() {
         <div style={{ fontSize: 10, color: '#CBD5E1' }}>© 2026 AEdu.my — Hak Cipta Terpelihara</div>
         <a href="/admin" style={{ display: 'inline-block', marginTop: 12, fontSize: 11, color: '#CBD5E1', textDecoration: 'none', padding: '5px 14px', border: '1px solid #E2E8F0', borderRadius: 20, background: 'white' }}>⚙️ Admin</a>
       </div>
+
+      {/* ── UPGRADE PREMIUM POPUP ── */}
+      {upgradeTarget && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.7)', backdropFilter: 'blur(8px)', zIndex: 300, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', padding: '0 0 0 0' }}
+          onClick={e => { if(e.target === e.currentTarget){ setUpgradeTarget(null); setUpgradeStep('ad'); setPaymentSubmitted(false); setProofUrl('') }}}>
+
+          <div style={{ background: 'white', borderRadius: '28px 28px 0 0', width: '100%', maxWidth: 480, maxHeight: '92vh', overflowY: 'auto', paddingBottom: 32 }}>
+
+            {/* AD STEP */}
+            {upgradeStep === 'ad' && !paymentSubmitted && (
+              <>
+                {/* Hero banner */}
+                <div style={{ background: 'linear-gradient(135deg,#4F46E5 0%,#7C3AED 50%,#EC4899 100%)', padding: '32px 24px 28px', position: 'relative', overflow: 'hidden', borderRadius: '28px 28px 0 0' }}>
+                  <div style={{ position: 'absolute', top: -20, right: -20, width: 120, height: 120, background: 'rgba(255,255,255,0.08)', borderRadius: '50%' }} />
+                  <div style={{ position: 'absolute', bottom: -30, left: '20%', width: 160, height: 160, background: 'rgba(255,255,255,0.05)', borderRadius: '50%' }} />
+                  <button onClick={() => { setUpgradeTarget(null); setUpgradeStep('ad') }}
+                    style={{ position: 'absolute', top: 16, right: 16, width: 32, height: 32, borderRadius: '50%', background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', fontSize: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
+                  <div style={{ textAlign: 'center', position: 'relative' }}>
+                    <div style={{ fontSize: 56, marginBottom: 8, filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.3))' }}>💎</div>
+                    <h2 style={{ fontFamily: "'Plus Jakarta Sans',sans-serif", fontSize: 26, fontWeight: 900, color: 'white', marginBottom: 6, letterSpacing: '-0.5px' }}>AEdu Premium</h2>
+                    <p style={{ color: 'rgba(255,255,255,0.85)', fontSize: 14 }}>Buka kunci semua aktiviti pembelajaran!</p>
+                  </div>
+                </div>
+
+                <div style={{ padding: '24px 20px' }}>
+                  {/* Locked app preview */}
+                  <div style={{ background: '#F8FAFC', borderRadius: 16, padding: '14px 16px', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 12, border: '1px solid #E2E8F0' }}>
+                    <div style={{ width: 52, height: 52, borderRadius: 14, background: 'linear-gradient(135deg,#4F46E5,#7C3AED)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      {upgradeTarget.img_url
+                        ? <img src={upgradeTarget.img_url} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 14 }} />
+                        : <span style={{ fontSize: 26 }}>🎮</span>}
+                    </div>
+                    <div>
+                      <div style={{ fontWeight: 800, fontSize: 14, color: '#0F172A' }}>{upgradeTarget.name}</div>
+                      <div style={{ fontSize: 12, color: '#6366F1', fontWeight: 600, marginTop: 2 }}>🔒 Aktiviti Premium — Kunci dengan upgrade!</div>
+                    </div>
+                  </div>
+
+                  {/* Features */}
+                  <div style={{ marginBottom: 20 }}>
+                    {[
+                      { icon: '🎮', text: 'Akses SEMUA aktiviti & games premium' },
+                      { icon: '⚡', text: 'Kandungan baru ditambah setiap minggu' },
+                      { icon: '🏆', text: 'Pembelajaran interaktif yang lebih menyeronokkan' },
+                      { icon: '👨‍👩‍👧', text: 'Sesuai untuk semua tahun persekolahan' },
+                    ].map((f, i) => (
+                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: i < 3 ? '1px solid #F1F5F9' : 'none' }}>
+                        <span style={{ fontSize: 22, flexShrink: 0 }}>{f.icon}</span>
+                        <span style={{ fontSize: 13, color: '#374151', fontWeight: 500 }}>{f.text}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Price */}
+                  <div style={{ background: 'linear-gradient(135deg,#4F46E5,#7C3AED)', borderRadius: 20, padding: '20px', marginBottom: 16, textAlign: 'center' }}>
+                    <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.75)', fontWeight: 600, marginBottom: 4 }}>HARGA ISTIMEWA</div>
+                    <div style={{ fontFamily: "'Plus Jakarta Sans',sans-serif", fontSize: 48, fontWeight: 900, color: 'white', letterSpacing: '-2px' }}>
+                      RM{payInfo.price}
+                    </div>
+                    <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.8)', marginTop: 4 }}>✨ Bayar sekali • Guna selamanya • Tiada yuran bulanan</div>
+                  </div>
+
+                  <button onClick={() => setUpgradeStep('payment')} style={{
+                    width: '100%', padding: '16px', background: 'linear-gradient(135deg,#4F46E5,#7C3AED)',
+                    color: 'white', border: 'none', borderRadius: 16, fontSize: 16, fontWeight: 800,
+                    cursor: 'pointer', fontFamily: "'Plus Jakarta Sans',sans-serif",
+                    boxShadow: '0 8px 24px rgba(79,70,229,0.4)', letterSpacing: '-0.3px'
+                  }}>
+                    💎 Upgrade ke Premium — RM{payInfo.price}
+                  </button>
+                  <button onClick={() => { setUpgradeTarget(null); setUpgradeStep('ad') }}
+                    style={{ width: '100%', padding: '12px', background: 'none', border: 'none', color: '#94A3B8', fontSize: 13, cursor: 'pointer', marginTop: 8 }}>
+                    Mungkin lain kali
+                  </button>
+                </div>
+              </>
+            )}
+
+            {/* PAYMENT STEP */}
+            {upgradeStep === 'payment' && !paymentSubmitted && (
+              <>
+                <div style={{ background: 'linear-gradient(135deg,#4F46E5,#7C3AED)', padding: '20px 20px 16px', borderRadius: '28px 28px 0 0', display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <button onClick={() => setUpgradeStep('ad')} style={{ width: 34, height: 34, borderRadius: '50%', background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', fontSize: 16, cursor: 'pointer' }}>←</button>
+                  <div style={{ fontFamily: "'Plus Jakarta Sans',sans-serif", fontWeight: 800, fontSize: 17, color: 'white', flex: 1 }}>Buat Pembayaran</div>
+                  <button onClick={() => { setUpgradeTarget(null); setUpgradeStep('ad') }}
+                    style={{ width: 34, height: 34, borderRadius: '50%', background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', fontSize: 16, cursor: 'pointer' }}>✕</button>
+                </div>
+                <div style={{ padding: '20px' }}>
+                  {/* Amount */}
+                  <div style={{ background: 'linear-gradient(135deg,#4F46E5,#6366F1)', borderRadius: 16, padding: '18px', marginBottom: 16, textAlign: 'center' }}>
+                    <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.75)', fontWeight: 600, marginBottom: 4 }}>JUMLAH BAYARAN</div>
+                    <div style={{ fontFamily: "'Plus Jakarta Sans',sans-serif", fontSize: 40, fontWeight: 900, color: 'white', letterSpacing: '-1px' }}>RM {payInfo.price}</div>
+                    <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.7)', marginTop: 4 }}>Akses Lifetime Premium</div>
+                  </div>
+
+                  {/* Bank details */}
+                  <div style={{ background: '#F8FAFC', borderRadius: 14, padding: '16px', marginBottom: 14, border: '1px solid #E2E8F0' }}>
+                    <div style={{ fontWeight: 800, fontSize: 13, marginBottom: 12, color: '#0F172A' }}>📋 Maklumat Pembayaran</div>
+                    {payInfo.instructions && <p style={{ fontSize: 12, color: '#475569', marginBottom: 10, lineHeight: 1.5 }}>{payInfo.instructions}</p>}
+                    {[['🏦 Bank', payInfo.bank], ['👤 Nama Akaun', payInfo.accountName], ['🔢 No. Akaun', payInfo.accountNumber]].map(([k,v]) => v ? (
+                      <div key={k} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid #F1F5F9' }}>
+                        <span style={{ fontSize: 12, color: '#64748B' }}>{k}</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span style={{ fontSize: 13, fontWeight: 700, color: '#0F172A' }}>{v}</span>
+                          {k.includes('Akaun') && k.includes('No') && (
+                            <button onClick={() => navigator.clipboard.writeText(v)}
+                              style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', background: '#4F46E5', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer' }}>Salin</button>
+                          )}
+                        </div>
+                      </div>
+                    ) : null)}
+                  </div>
+
+                  {payInfo.qrUrl && (
+                    <div style={{ textAlign: 'center', marginBottom: 14 }}>
+                      <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8 }}>📱 Atau imbas QR</div>
+                      <img src={payInfo.qrUrl} alt="QR" style={{ width: 160, height: 160, objectFit: 'contain', borderRadius: 12 }} />
+                    </div>
+                  )}
+
+                  {/* Upload proof */}
+                  <div style={{ background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: 12, padding: '14px', marginBottom: 16 }}>
+                    <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8 }}>📸 Muat Naik Bukti Bayaran</div>
+                    {proofUrl
+                      ? <div style={{ textAlign: 'center' }}>
+                          <img src={proofUrl} style={{ width: '100%', maxHeight: 120, objectFit: 'cover', borderRadius: 8 }} />
+                          <p style={{ fontSize: 12, color: '#10B981', fontWeight: 700, marginTop: 6 }}>✓ Bukti dimuat naik</p>
+                        </div>
+                      : <label style={{ display: 'block', border: '2px dashed #86EFAC', borderRadius: 10, padding: '14px', textAlign: 'center', cursor: 'pointer', color: '#16A34A', fontSize: 13, fontWeight: 600 }}>
+                          <input type="file" accept="image/*" style={{ display: 'none' }} onChange={async e => {
+                            const f = e.target.files?.[0]; if (!f) return
+                            setUploadingProof(true)
+                            const r = new FileReader(); r.onload = async ev => {
+                              const d = ev.target!.result as string
+                              const arr = d.split(','), mime = arr[0].match(/:(.*?);/)![1]
+                              const bstr = atob(arr[1]); const u8 = new Uint8Array(bstr.length)
+                              for (let i=0;i<bstr.length;i++) u8[i]=bstr.charCodeAt(i)
+                              const blob = new Blob([u8],{type:mime})
+                              const fname = `proof_${Date.now()}.${mime.split('/')[1]}`
+                              const { error } = await supabase.storage.from('images').upload(fname, blob)
+                              if (!error) {
+                                const { data } = supabase.storage.from('images').getPublicUrl(fname)
+                                setProofUrl(data.publicUrl)
+                              }
+                              setUploadingProof(false)
+                            }; r.readAsDataURL(f)
+                          }} />
+                          {uploadingProof ? '⏳ Memuat naik...' : '📎 Ketik untuk pilih gambar resit'}
+                        </label>}
+                  </div>
+
+                  <button onClick={async () => {
+                    if (!student) return
+                    // Submit payment request
+                    await supabase.from('payment_requests').insert({
+                      student_id: student.id,
+                      full_name: student.full_name,
+                      parent_phone: '',
+                      amount: payInfo.price,
+                      proof_url: proofUrl || null,
+                      status: 'pending',
+                    })
+                    setPaymentSubmitted(true)
+                  }} style={{
+                    width: '100%', padding: '15px', background: 'linear-gradient(135deg,#10B981,#059669)',
+                    color: 'white', border: 'none', borderRadius: 14, fontSize: 15, fontWeight: 800,
+                    cursor: 'pointer', fontFamily: "'Plus Jakarta Sans',sans-serif",
+                    boxShadow: '0 6px 20px rgba(16,185,129,0.35)'
+                  }}>
+                    ✅ Saya Sudah Bayar — Hantar
+                  </button>
+
+                  {payInfo.whatsapp && (
+                    <a href={`https://wa.me/${payInfo.whatsapp}?text=Salam%2C+saya+${encodeURIComponent(student?.full_name||'')}+ingin+upgrade+ke+AEdu+Premium+RM${payInfo.price}.`}
+                      target="_blank" rel="noopener noreferrer"
+                      style={{ display: 'block', padding: '12px', background: '#DCFCE7', color: '#15803D', borderRadius: 12, fontSize: 14, fontWeight: 700, textDecoration: 'none', marginTop: 10, textAlign: 'center', border: '1px solid #86EFAC' }}>
+                      💬 Hubungi Admin via WhatsApp
+                    </a>
+                  )}
+                </div>
+              </>
+            )}
+
+            {/* SUCCESS STEP */}
+            {paymentSubmitted && (
+              <div style={{ padding: '40px 24px', textAlign: 'center' }}>
+                <div style={{ fontSize: 64, marginBottom: 16 }}>🎉</div>
+                <h2 style={{ fontFamily: "'Plus Jakarta Sans',sans-serif", fontSize: 22, fontWeight: 900, marginBottom: 8 }}>Terima Kasih!</h2>
+                <p style={{ color: '#64748B', fontSize: 14, marginBottom: 20, lineHeight: 1.6 }}>
+                  Permintaan upgrade anda telah dihantar. Admin akan mengesahkan bayaran dan mengaktifkan Premium dalam masa <strong>24 jam</strong>.
+                </p>
+                <div style={{ background: '#EEF2FF', borderRadius: 14, padding: '16px', marginBottom: 20, textAlign: 'left' }}>
+                  <div style={{ fontWeight: 700, color: '#3730A3', marginBottom: 8, fontSize: 13 }}>📋 Langkah seterusnya:</div>
+                  <div style={{ fontSize: 13, color: '#4338CA', lineHeight: 1.8 }}>
+                    1. Simpan resit bayaran anda<br/>
+                    2. Tunggu pengesahan admin<br/>
+                    3. Log keluar dan log masuk semula selepas diaktifkan
+                  </div>
+                </div>
+                <button onClick={() => { setUpgradeTarget(null); setUpgradeStep('ad'); setPaymentSubmitted(false); setProofUrl('') }}
+                  style={{ width: '100%', padding: '14px', background: 'linear-gradient(135deg,#4F46E5,#7C3AED)', color: 'white', border: 'none', borderRadius: 14, fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>
+                  Tutup
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* IFRAME VIEWER */}
       {activeLink && (

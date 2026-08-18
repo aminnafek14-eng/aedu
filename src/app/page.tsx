@@ -57,72 +57,61 @@ export default function StudentHome() {
     const s = JSON.parse(saved)
     localStorage.setItem('aedu_student', saved)
     setStudent(s)
-    loadData().then(() => joinPresence(s))
+    loadData().then(() => startHeartbeat(s))
     const timeout = setTimeout(() => setLoading(false), 5000)
     return () => { channelRef.current?.unsubscribe(); clearTimeout(timeout) }
   }, [])
 
-  const joinPresence = (s: StudentSession) => {
-    const ch = supabase.channel('aedu_presence', { config: { presence: { key: s.id } } })
-    ch.subscribe(async (status) => {
-      if (status === 'SUBSCRIBED') await ch.track({ user_id: s.id, full_name: s.full_name, online_at: new Date().toISOString() })
-    })
-    channelRef.current = ch
+  // Ganti Presence dengan last_seen ping — jauh lebih ringan
+  // Tidak guna Realtime connection langsung untuk murid
+  const startHeartbeat = (s: StudentSession) => {
+    const ping = async () => {
+      await supabase.from('students')
+        .update({ last_seen: new Date().toISOString() })
+        .eq('id', s.id)
+    }
+    ping() // ping terus bila masuk
+    // Ping setiap 2 minit sahaja — sangat ringan
+    const interval = setInterval(ping, 2 * 60 * 1000)
+    channelRef.current = { unsubscribe: () => clearInterval(interval) } as any
   }
 
-  // ── REALTIME: update data murid tanpa refresh ──
+  // ── MURID: Realtime MINIMUM ──
+  // Hanya 1 channel untuk perubahan kritikal sahaja
+  // Tidak guna Presence — jimat connection limit
   useEffect(() => {
     if (!student) return
 
     const channel = supabase
-      .channel('aedu_student_realtime_' + student.id)
-      // Update apps bila admin tambah/ubah/padam
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'links' },
-        () => { loadData() }
-      )
-      // Update banner
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'banners' },
-        () => { loadData() }
-      )
-      // Update akaun murid sendiri — REALTIME premium/subscription changes
+      .channel('aedu_student_' + student.id)
+      // Penting: hanya dengar perubahan pada akaun sendiri (premium on/off)
       .on('postgres_changes', {
-        event: 'UPDATE', schema: 'public', table: 'students',
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'students',
         filter: `id=eq.${student.id}`
-      },
-        (payload) => {
-          const updated = payload.new as any
-          console.log('Student updated realtime:', updated)
-          const newSession = JSON.stringify({
-            id: updated.id,
-            full_name: updated.full_name,
-            student_id: updated.student_id,
-            is_subscribed: updated.is_subscribed,
-            is_premium: updated.is_premium,
-          })
-          sessionStorage.setItem('aedu_student', newSession)
-          localStorage.setItem('aedu_student', newSession)
-          setStudent({
-            id: updated.id,
-            full_name: updated.full_name,
-            student_id: updated.student_id,
-            is_subscribed: updated.is_subscribed,
-            is_premium: updated.is_premium,
-          })
-        }
-      )
-      .subscribe((status) => {
-        console.log('Student realtime status:', status)
+      }, (payload) => {
+        const u = payload.new as any
+        const newSession = JSON.stringify({
+          id: u.id, full_name: u.full_name,
+          student_id: u.student_id,
+          is_subscribed: u.is_subscribed,
+          is_premium: u.is_premium,
+        })
+        sessionStorage.setItem('aedu_student', newSession)
+        localStorage.setItem('aedu_student', newSession)
+        setStudent({ id: u.id, full_name: u.full_name, student_id: u.student_id, is_subscribed: u.is_subscribed, is_premium: u.is_premium })
       })
+      .subscribe()
 
     return () => { supabase.removeChannel(channel) }
   }, [student?.id])
 
-  // Polling fallback — semak setiap 30 saat jika realtime tidak aktif
+  // Polling ringan untuk apps & kandungan — tiada Realtime connection tambahan
+  // Semak setiap 5 minit sahaja (bukan setiap 30 saat)
   useEffect(() => {
     if (!student) return
-    const interval = setInterval(() => {
-      refreshStudentSession(student.id)
-    }, 30000) // 30 saat
+    const interval = setInterval(() => { loadData() }, 5 * 60 * 1000)
     return () => clearInterval(interval)
   }, [student?.id])
 

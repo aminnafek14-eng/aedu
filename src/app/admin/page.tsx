@@ -4,7 +4,7 @@ import { supabase } from '@/lib/supabase'
 import { adminApi, uploadImageAdmin } from '@/lib/adminApi'
 import type { Folder, Link, Banner, Student } from '@/lib/supabase'
 
-type Tab = 'overview' | 'apps' | 'banners' | 'students' | 'payment'
+type Tab = 'overview' | 'apps' | 'banners' | 'students' | 'requests' | 'payment'
 const ADMIN_PW = '050505'
 
 // Lucide-style SVG icons (inline, no dependency)
@@ -36,6 +36,7 @@ export default function AdminPage() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [students, setStudents] = useState<any[]>([])
   const [paymentRequests, setPaymentRequests] = useState<any[]>([])
+  const [allPaymentRequests, setAllPaymentRequests] = useState<any[]>([])
   const [paySettings, setPaySettings] = useState({
     price: '50', instructions: '', bank: '', accountName: '', accountNumber: '', qrUrl: '', whatsapp: ''
   })
@@ -83,7 +84,7 @@ export default function AdminPage() {
       supabase.from('banners').select('*').order('order_num'),
       supabase.from('students').select('*').order('created_at', { ascending: false }),
       Promise.resolve({ data: null }),
-      supabase.from('payment_requests').select('*').eq('status','pending').order('created_at', { ascending: false }),
+      supabase.from('payment_requests').select('*, students(student_id, is_premium)').eq('status','pending').order('created_at', { ascending: false }),
     ])
     setLinks(l || [])
     setBanners(b || []); setStudents(s || [])
@@ -245,6 +246,22 @@ export default function AdminPage() {
 
   useEffect(() => { return () => { presenceRef.current?.unsubscribe() } }, [])
 
+  // Realtime: auto-update bila ada payment request baru
+  useEffect(() => {
+    if (!authed) return
+    const channel = supabase
+      .channel('payment_requests_changes')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'payment_requests' },
+        (payload) => {
+          const req = payload.new as any
+          addLog(`💳 Permintaan baru: ${req.full_name} (RM${req.amount})`, 'join')
+          loadAll() // refresh senarai
+        }
+      )
+      .subscribe()
+    return () => { supabase.removeChannel(channel) }
+  }, [authed])
+
   useEffect(() => {
     const c = canvasRef.current; if (!c) return
     const ctx = c.getContext('2d'); if (!ctx) return
@@ -404,6 +421,7 @@ export default function AdminPage() {
     { key: 'banners', label: 'Banner', icon: Icons.banners },
     { key: 'students', label: 'Murid', icon: Icons.students },
 
+    { key: 'requests', label: 'Permintaan', icon: Icons.subscription },
     { key: 'payment', label: 'Bayaran', icon: Icons.payment },
   ]
 
@@ -457,6 +475,9 @@ export default function AdminPage() {
             }}>
               <span style={{ color: tab === t.key ? '#4F46E5' : '#94A3B8', display: 'flex' }}>{t.icon}</span>
               {t.label}
+              {t.key === 'requests' && paymentRequests.length > 0 && (
+                <span style={{ marginLeft: 4, background: '#EF4444', color: 'white', borderRadius: 20, fontSize: 9, fontWeight: 900, padding: '1px 6px', minWidth: 16, textAlign: 'center' }}>{paymentRequests.length}</span>
+              )}
 
             </button>
           ))}
@@ -765,6 +786,103 @@ export default function AdminPage() {
         )}
 
 
+
+        {/* REQUESTS — Permintaan Upgrade Premium */}
+        {tab === 'requests' && (
+          <div>
+            {/* Header stats */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 14 }}>
+              {[
+                { label: '⏳ Menunggu', val: paymentRequests.length, color: '#F59E0B', bg: '#FFFBEB' },
+                { label: '✅ Diluluskan', val: allPaymentRequests.filter((r:any) => r.status === 'approved').length, color: '#10B981', bg: '#ECFDF5' },
+                { label: '❌ Ditolak', val: allPaymentRequests.filter((r:any) => r.status === 'rejected').length, color: '#EF4444', bg: '#FEF2F2' },
+              ].map(s => (
+                <div key={s.label} style={{ background: 'white', borderRadius: 14, padding: '14px', border: `1px solid ${s.bg}`, boxShadow: '0 2px 8px rgba(0,0,0,0.04)', textAlign: 'center' }}>
+                  <div style={{ fontFamily: "'Plus Jakarta Sans',sans-serif", fontSize: 28, fontWeight: 900, color: s.color }}>{s.val}</div>
+                  <div style={{ fontSize: 10, color: '#64748B', fontWeight: 600, marginTop: 3 }}>{s.label}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Pending requests */}
+            {paymentRequests.length === 0 ? (
+              <div style={{ background: 'white', borderRadius: 16, padding: '40px 20px', textAlign: 'center', border: '1px solid #E2E8F0' }}>
+                <div style={{ fontSize: 48, marginBottom: 12 }}>✅</div>
+                <div style={{ fontWeight: 700, color: '#64748B', fontSize: 15 }}>Tiada permintaan menunggu</div>
+                <div style={{ fontSize: 13, color: '#94A3B8', marginTop: 4 }}>Semua permintaan telah diproses</div>
+              </div>
+            ) : (
+              <Section title={`⏳ Menunggu Kelulusan (${paymentRequests.length})`}>
+                {paymentRequests.map((req: any) => (
+                  <div key={req.id} style={{ background: '#FFFBEB', borderRadius: 14, border: '2px solid #FDE68A', padding: '14px', marginBottom: 10 }}>
+                    {/* Student info */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+                      <div style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg,#F59E0B,#D97706)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, color: 'white', fontWeight: 900, flexShrink: 0 }}>
+                        {req.full_name.charAt(0)}
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontWeight: 800, fontSize: 15, color: '#0F172A' }}>{req.full_name}</div>
+                        <div style={{ fontSize: 11, color: '#92400E', marginTop: 2, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                          {req.parent_phone && <span>📞 {req.parent_phone}</span>}
+                          <span>💰 RM{req.amount}</span>
+                          <span>🕐 {new Date(req.created_at).toLocaleDateString('ms-MY', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' })}</span>
+                        </div>
+                      </div>
+                      <div style={{ background: '#FEF3C7', color: '#D97706', fontSize: 11, fontWeight: 800, padding: '4px 10px', borderRadius: 20, flexShrink: 0 }}>PENDING</div>
+                    </div>
+
+                    {/* Proof image */}
+                    {req.proof_url ? (
+                      <div style={{ marginBottom: 12 }}>
+                        <div style={{ fontSize: 12, fontWeight: 700, color: '#92400E', marginBottom: 6 }}>📸 Bukti Bayaran:</div>
+                        <a href={req.proof_url} target="_blank" rel="noopener noreferrer">
+                          <img src={req.proof_url} alt="Bukti" style={{ width: '100%', maxHeight: 200, objectFit: 'cover', borderRadius: 12, border: '2px solid #FDE68A', cursor: 'pointer' }} />
+                          <div style={{ fontSize: 11, color: '#92400E', marginTop: 4, textAlign: 'center' }}>👆 Klik untuk lihat penuh</div>
+                        </a>
+                      </div>
+                    ) : (
+                      <div style={{ background: '#FEF3C7', borderRadius: 10, padding: '10px 14px', marginBottom: 12, fontSize: 12, color: '#92400E' }}>
+                        ⚠️ Murid tidak muat naik bukti bayaran
+                      </div>
+                    )}
+
+                    {/* Action buttons */}
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button onClick={() => approvePayment(req.id, req.student_id, req.full_name)}
+                        style={{ flex: 1, padding: '12px', background: 'linear-gradient(135deg,#10B981,#059669)', color: 'white', border: 'none', borderRadius: 12, fontSize: 14, fontWeight: 800, cursor: 'pointer', boxShadow: '0 4px 12px rgba(16,185,129,0.3)' }}>
+                        ✅ Luluskan & Aktifkan Premium
+                      </button>
+                      <button onClick={() => rejectPayment(req.id, req.full_name)}
+                        style={{ padding: '12px 16px', background: '#FEF2F2', color: '#EF4444', border: '2px solid #FECACA', borderRadius: 12, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+                        ✕ Tolak
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </Section>
+            )}
+
+            {/* History - approved/rejected */}
+            {allPaymentRequests.filter((r:any) => r.status !== 'pending').length > 0 && (
+              <Section title="📋 Sejarah Permintaan">
+                {allPaymentRequests.filter((r:any) => r.status !== 'pending').map((req: any) => (
+                  <div key={req.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 12, border: '1px solid #E2E8F0', background: 'white', marginBottom: 6 }}>
+                    <div style={{ width: 36, height: 36, borderRadius: 10, background: req.status === 'approved' ? '#ECFDF5' : '#FEF2F2', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0 }}>
+                      {req.status === 'approved' ? '✅' : '❌'}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 700, fontSize: 13 }}>{req.full_name}</div>
+                      <div style={{ fontSize: 10, color: '#94A3B8' }}>RM{req.amount} • {new Date(req.created_at).toLocaleDateString('ms-MY')}</div>
+                    </div>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: req.status === 'approved' ? '#10B981' : '#EF4444', flexShrink: 0 }}>
+                      {req.status === 'approved' ? 'Diluluskan' : 'Ditolak'}
+                    </div>
+                  </div>
+                ))}
+              </Section>
+            )}
+          </div>
+        )}
 
         {/* PAYMENT */}
         {tab === 'payment' && (

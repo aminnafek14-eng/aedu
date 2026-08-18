@@ -254,19 +254,49 @@ export default function AdminPage() {
 
   useEffect(() => { return () => { presenceRef.current?.unsubscribe() } }, [])
 
-  // Realtime: auto-update bila ada payment request baru
+  // ── REALTIME: semua perubahan data live ──
   useEffect(() => {
     if (!authed) return
+
     const channel = supabase
-      .channel('payment_requests_changes')
+      .channel('aedu_admin_realtime')
+      // Payment requests - baru masuk
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'payment_requests' },
         (payload) => {
           const req = payload.new as any
           addLog(`💳 Permintaan baru: ${req.full_name} (RM${req.amount})`, 'join')
-          loadAll() // refresh senarai
+          loadAll()
         }
       )
-      .subscribe()
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'payment_requests' },
+        () => { loadAll() }
+      )
+      // Students - daftar baru
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'students' },
+        (payload) => {
+          const s = payload.new as any
+          addLog(`👤 Murid baru: ${s.full_name}`, 'join')
+          loadAll()
+        }
+      )
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'students' },
+        () => { loadAll() }
+      )
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'students' },
+        () => { loadAll() }
+      )
+      // Links - aktiviti baru/ubah
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'links' },
+        () => { loadAll() }
+      )
+      // Banners
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'banners' },
+        () => { loadAll() }
+      )
+      .subscribe((status) => {
+        console.log('Admin realtime:', status)
+      })
+
     return () => { supabase.removeChannel(channel) }
   }, [authed])
 

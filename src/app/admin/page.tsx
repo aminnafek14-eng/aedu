@@ -23,7 +23,7 @@ const Icons = {
   save: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>,
   logout: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>,
   activity: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>,
-  chart: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>,
+  barchart: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>,
   eye: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>,
   upload: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg>,
 }
@@ -45,8 +45,7 @@ export default function AdminPage() {
   const [savingPaySettings, setSavingPaySettings] = useState(false)
   const [payQrData, setPayQrData] = useState('')
 
-  // App Usage tracking
-  const [usageData, setUsageData] = useState<any[]>([])
+  // Usage tracking state
   const [usageStudentFilter, setUsageStudentFilter] = useState('')
   const [usageSelectedStudent, setUsageSelectedStudent] = useState<any>(null)
   const [studentUsage, setStudentUsage] = useState<any[]>([])
@@ -128,25 +127,22 @@ export default function AdminPage() {
 
 
 
-  // ── USAGE FUNCTIONS ──
-  const loadUsageForStudent = async (student: any) => {
+  const loadUsageForStudent = async (s: any) => {
     setUsageLoading(true)
-    setUsageSelectedStudent(student)
+    setUsageSelectedStudent(s)
     const { data } = await supabase
       .from('app_usage')
       .select('*')
-      .eq('student_id', student.id)
+      .eq('student_id', s.id)
       .order('opened_at', { ascending: false })
-      .limit(100)
+      .limit(200)
     setStudentUsage(data || [])
     setUsageLoading(false)
   }
 
   const loadAppReport = async () => {
     setUsageLoading(true)
-    const { data } = await supabase
-      .from('app_usage')
-      .select('link_id, link_name')
+    const { data } = await supabase.from('app_usage').select('link_id, link_name')
     if (data) {
       const counts: Record<string, { link_id: string; link_name: string; count: number }> = {}
       data.forEach((row: any) => {
@@ -154,8 +150,7 @@ export default function AdminPage() {
         if (!counts[key]) counts[key] = { link_id: row.link_id, link_name: row.link_name, count: 0 }
         counts[key].count++
       })
-      const sorted = Object.values(counts).sort((a, b) => b.count - a.count)
-      setAppReport(sorted)
+      setAppReport(Object.values(counts).sort((a, b) => b.count - a.count))
     }
     setUsageLoading(false)
   }
@@ -344,11 +339,9 @@ export default function AdminPage() {
     return () => { supabase.removeChannel(channel) }
   }, [authed])
 
-  // Auto-load report bila masuk tab laporan
   useEffect(() => {
-    if (tab === 'report' && authed && appReport.length === 0) {
-      loadAppReport()
-    }
+    if (tab === 'report' && authed && appReport.length === 0) loadAppReport()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, authed])
 
   useEffect(() => {
@@ -513,7 +506,7 @@ export default function AdminPage() {
     { key: 'requests', label: 'Permintaan', icon: Icons.subscription },
     { key: 'payment', label: 'Bayaran', icon: Icons.payment },
     { key: 'usage', label: 'Penggunaan', icon: Icons.activity },
-    { key: 'report', label: 'Laporan Apps', icon: Icons.chart },
+    { key: 'report', label: 'Laporan Apps', icon: Icons.barchart },
   ]
 
   return (
@@ -1063,65 +1056,63 @@ export default function AdminPage() {
           </Section>
         )}
 
-        {/* ── TAB: PENGGUNAAN MURID ── */}
+        {/* ── TAB PENGGUNAAN: history per murid ── */}
         {tab === 'usage' && (
-          <Section title="Penggunaan Apps Per Murid">
-            <div style={{ marginBottom: 16 }}>
-              <p style={{ fontSize: 12, color: '#64748B', marginBottom: 12 }}>Pilih murid untuk lihat aktiviti penggunaan apps mereka.</p>
-              <input
-                placeholder="🔍 Cari nama murid..."
-                value={usageStudentFilter}
-                onChange={e => setUsageStudentFilter(e.target.value)}
-                style={{ width: '100%', padding: '10px 14px', border: '1.5px solid #E2E8F0', borderRadius: 10, fontSize: 13, outline: 'none', marginBottom: 12, boxSizing: 'border-box' as const }}
-              />
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px,1fr))', gap: 8 }}>
-                {students
-                  .filter(s => s.full_name.toLowerCase().includes(usageStudentFilter.toLowerCase()) || (s.student_id||'').toLowerCase().includes(usageStudentFilter.toLowerCase()))
-                  .map(s => (
-                    <button key={s.id} onClick={() => loadUsageForStudent(s)}
-                      style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', border: `2px solid ${usageSelectedStudent?.id === s.id ? '#4F46E5' : '#E2E8F0'}`, borderRadius: 10, background: usageSelectedStudent?.id === s.id ? '#EEF2FF' : 'white', cursor: 'pointer', textAlign: 'left' as const }}>
-                      <span style={{ width: 34, height: 34, borderRadius: '50%', background: 'linear-gradient(135deg,#4F46E5,#6366F1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 700, fontSize: 13, flexShrink: 0 }}>{s.full_name[0]}</span>
-                      <div>
-                        <div style={{ fontSize: 12, fontWeight: 700, color: '#1E293B', lineHeight: 1.3 }}>{s.full_name}</div>
-                        <div style={{ fontSize: 11, color: '#94A3B8' }}>@{s.student_id || 'tiada id'}</div>
-                      </div>
-                    </button>
-                  ))}
-              </div>
+          <Section title="📱 Penggunaan Apps Per Murid">
+            <p style={{ fontSize: 12, color: '#64748B', marginBottom: 14 }}>Pilih murid untuk lihat apps yang pernah dibuka.</p>
+            <input
+              placeholder="🔍 Cari nama atau ID murid..."
+              value={usageStudentFilter}
+              onChange={e => setUsageStudentFilter(e.target.value)}
+              style={{ width: '100%', padding: '10px 14px', border: '1.5px solid #E2E8F0', borderRadius: 10, fontSize: 13, outline: 'none', marginBottom: 14, boxSizing: 'border-box' as const }}
+            />
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(190px,1fr))', gap: 8, marginBottom: 20 }}>
+              {students
+                .filter(s => s.full_name.toLowerCase().includes(usageStudentFilter.toLowerCase()) || (s.student_id||'').toLowerCase().includes(usageStudentFilter.toLowerCase()))
+                .map((s: any) => (
+                  <button key={s.id} onClick={() => loadUsageForStudent(s)}
+                    style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 14px', border:`2px solid ${usageSelectedStudent?.id===s.id?'#4F46E5':'#E2E8F0'}`, borderRadius:10, background:usageSelectedStudent?.id===s.id?'#EEF2FF':'white', cursor:'pointer', textAlign:'left' as const }}>
+                    <span style={{ width:34, height:34, borderRadius:'50%', background:'linear-gradient(135deg,#4F46E5,#6366F1)', display:'flex', alignItems:'center', justifyContent:'center', color:'white', fontWeight:700, fontSize:14, flexShrink:0 }}>{s.full_name[0]}</span>
+                    <div style={{ minWidth:0 }}>
+                      <div style={{ fontSize:12, fontWeight:700, color:'#1E293B', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{s.full_name}</div>
+                      <div style={{ fontSize:11, color:'#94A3B8' }}>@{s.student_id||'—'}</div>
+                    </div>
+                  </button>
+                ))}
             </div>
 
             {usageSelectedStudent && (
-              <div style={{ marginTop: 20, borderTop: '2px solid #F1F5F9', paddingTop: 20 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
-                  <span style={{ width: 40, height: 40, borderRadius: '50%', background: 'linear-gradient(135deg,#4F46E5,#6366F1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 700, fontSize: 16 }}>{usageSelectedStudent.full_name[0]}</span>
+              <div style={{ borderTop:'2px solid #F1F5F9', paddingTop:20 }}>
+                <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:16 }}>
+                  <span style={{ width:42, height:42, borderRadius:'50%', background:'linear-gradient(135deg,#4F46E5,#6366F1)', display:'flex', alignItems:'center', justifyContent:'center', color:'white', fontWeight:800, fontSize:17 }}>{usageSelectedStudent.full_name[0]}</span>
                   <div>
-                    <div style={{ fontSize: 15, fontWeight: 800, color: '#1E293B' }}>{usageSelectedStudent.full_name}</div>
-                    <div style={{ fontSize: 12, color: '#64748B' }}>@{usageSelectedStudent.student_id} · {studentUsage.length} rekod penggunaan</div>
+                    <div style={{ fontSize:15, fontWeight:800, color:'#1E293B' }}>{usageSelectedStudent.full_name}</div>
+                    <div style={{ fontSize:12, color:'#64748B' }}>@{usageSelectedStudent.student_id} · {studentUsage.length} rekod</div>
                   </div>
                 </div>
 
                 {usageLoading ? (
-                  <div style={{ textAlign: 'center', padding: 40, color: '#94A3B8' }}>⏳ Memuatkan...</div>
+                  <div style={{ textAlign:'center', padding:40, color:'#94A3B8' }}>⏳ Memuatkan...</div>
                 ) : studentUsage.length === 0 ? (
-                  <div style={{ textAlign: 'center', padding: 40, background: '#F8FAFC', borderRadius: 12, color: '#94A3B8' }}>
-                    <div style={{ fontSize: 32, marginBottom: 8 }}>📊</div>
-                    <div style={{ fontWeight: 600 }}>Tiada rekod penggunaan</div>
-                    <div style={{ fontSize: 12, marginTop: 4 }}>Murid ini belum membuka mana-mana apps</div>
+                  <div style={{ textAlign:'center', padding:40, background:'#F8FAFC', borderRadius:12 }}>
+                    <div style={{ fontSize:32, marginBottom:8 }}>📊</div>
+                    <div style={{ fontWeight:600, color:'#475569' }}>Tiada rekod</div>
+                    <div style={{ fontSize:12, color:'#94A3B8', marginTop:4 }}>Murid ini belum buka mana-mana apps</div>
                   </div>
                 ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    {studentUsage.map((u, i) => {
+                  <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+                    {studentUsage.map((u: any, i: number) => {
                       const d = new Date(u.opened_at)
-                      const dateStr = d.toLocaleDateString('ms-MY', { day: '2-digit', month: 'short', year: 'numeric' })
-                      const timeStr = d.toLocaleTimeString('ms-MY', { hour: '2-digit', minute: '2-digit' })
                       return (
-                        <div key={u.id || i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', background: i % 2 === 0 ? '#F8FAFC' : 'white', borderRadius: 10, border: '1px solid #F1F5F9' }}>
-                          <span style={{ fontSize: 20, flexShrink: 0 }}>🎮</span>
-                          <div style={{ flex: 1 }}>
-                            <div style={{ fontSize: 13, fontWeight: 700, color: '#1E293B' }}>{u.link_name}</div>
-                            <div style={{ fontSize: 11, color: '#94A3B8', marginTop: 1 }}>{dateStr} · {timeStr}</div>
+                        <div key={u.id||i} style={{ display:'flex', alignItems:'center', gap:12, padding:'10px 14px', background:i%2===0?'#F8FAFC':'white', borderRadius:10, border:'1px solid #F1F5F9' }}>
+                          <span style={{ fontSize:20, flexShrink:0 }}>🎮</span>
+                          <div style={{ flex:1 }}>
+                            <div style={{ fontSize:13, fontWeight:700, color:'#1E293B' }}>{u.link_name}</div>
+                            <div style={{ fontSize:11, color:'#94A3B8', marginTop:2 }}>
+                              {d.toLocaleDateString('ms-MY',{day:'2-digit',month:'short',year:'numeric'})} · {d.toLocaleTimeString('ms-MY',{hour:'2-digit',minute:'2-digit'})}
+                            </div>
                           </div>
-                          <span style={{ fontSize: 10, background: '#EEF2FF', color: '#4F46E5', padding: '2px 8px', borderRadius: 20, fontWeight: 700 }}>#{studentUsage.length - i}</span>
+                          <span style={{ fontSize:10, background:'#EEF2FF', color:'#4F46E5', padding:'2px 8px', borderRadius:20, fontWeight:700 }}>#{i+1}</span>
                         </div>
                       )
                     })}
@@ -1132,46 +1123,45 @@ export default function AdminPage() {
           </Section>
         )}
 
-        {/* ── TAB: LAPORAN APPS ── */}
+        {/* ── TAB LAPORAN APPS: ranking kerap guna ── */}
         {tab === 'report' && (
-          <Section title="Laporan Penggunaan Apps" action={
-            <button onClick={loadAppReport} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', background: 'linear-gradient(135deg,#4F46E5,#6366F1)', color: 'white', border: 'none', borderRadius: 10, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+          <Section title="📈 Laporan Penggunaan Apps" action={
+            <button onClick={loadAppReport} style={{ display:'flex', alignItems:'center', gap:6, padding:'8px 16px', background:'linear-gradient(135deg,#4F46E5,#6366F1)', color:'white', border:'none', borderRadius:10, fontSize:12, fontWeight:700, cursor:'pointer' }}>
               🔄 Muat Semula
             </button>
           }>
-            {appReport.length === 0 && !usageLoading ? (
-              <div style={{ textAlign: 'center', padding: 40 }}>
-                <div style={{ fontSize: 40, marginBottom: 12 }}>📈</div>
-                <div style={{ fontWeight: 700, color: '#475569', marginBottom: 8 }}>Belum ada data laporan</div>
-                <button onClick={loadAppReport} style={{ padding: '10px 22px', background: 'linear-gradient(135deg,#4F46E5,#6366F1)', color: 'white', border: 'none', borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
-                  Jana Laporan
-                </button>
+            {usageLoading ? (
+              <div style={{ textAlign:'center', padding:50, color:'#94A3B8' }}>⏳ Menganalisis data...</div>
+            ) : appReport.length === 0 ? (
+              <div style={{ textAlign:'center', padding:50 }}>
+                <div style={{ fontSize:42, marginBottom:12 }}>📊</div>
+                <div style={{ fontWeight:700, color:'#475569', marginBottom:8 }}>Belum ada data</div>
+                <div style={{ fontSize:12, color:'#94A3B8', marginBottom:16 }}>Data akan muncul sebaik murid mula membuka apps</div>
+                <button onClick={loadAppReport} style={{ padding:'10px 24px', background:'linear-gradient(135deg,#4F46E5,#6366F1)', color:'white', border:'none', borderRadius:10, fontSize:13, fontWeight:700, cursor:'pointer' }}>Jana Laporan</button>
               </div>
-            ) : usageLoading ? (
-              <div style={{ textAlign: 'center', padding: 40, color: '#94A3B8' }}>⏳ Menganalisis data...</div>
             ) : (
               <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, padding: '10px 14px', background: '#F0F9FF', borderRadius: 10, border: '1px solid #BAE6FD' }}>
+                <div style={{ display:'flex', gap:8, marginBottom:16, padding:'10px 14px', background:'#F0F9FF', borderRadius:10, border:'1px solid #BAE6FD' }}>
                   <span>📊</span>
-                  <span style={{ fontSize: 12, color: '#0369A1', fontWeight: 600 }}>
-                    {appReport.reduce((sum, a) => sum + a.count, 0)} jumlah buka apps · {appReport.length} apps berbeza
+                  <span style={{ fontSize:12, color:'#0369A1', fontWeight:600 }}>
+                    {appReport.reduce((s,a)=>s+a.count,0)} jumlah buka · {appReport.length} apps berbeza
                   </span>
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {appReport.map((app, i) => {
-                    const maxCount = appReport[0]?.count || 1
-                    const pct = Math.round((app.count / maxCount) * 100)
-                    const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}.`
-                    const barColor = i === 0 ? '#4F46E5' : i === 1 ? '#7C3AED' : i === 2 ? '#EC4899' : '#94A3B8'
+                <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+                  {appReport.map((app: any, i: number) => {
+                    const maxCount = appReport[0]?.count||1
+                    const pct = Math.round((app.count/maxCount)*100)
+                    const medal = i===0?'🥇':i===1?'🥈':i===2?'🥉':`${i+1}.`
+                    const color = i===0?'#4F46E5':i===1?'#7C3AED':i===2?'#EC4899':'#94A3B8'
                     return (
-                      <div key={app.link_id || i} style={{ padding: '12px 16px', background: i < 3 ? '#FAFAFE' : 'white', border: `1.5px solid ${i < 3 ? '#E0E7FF' : '#F1F5F9'}`, borderRadius: 12 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-                          <span style={{ fontSize: i < 3 ? 20 : 13, fontWeight: 700, minWidth: 28, color: '#64748B' }}>{medal}</span>
-                          <span style={{ flex: 1, fontSize: 13, fontWeight: 700, color: '#1E293B' }}>{app.link_name}</span>
-                          <span style={{ fontSize: 13, fontWeight: 900, color: barColor }}>{app.count}x</span>
+                      <div key={app.link_id||i} style={{ padding:'12px 16px', background:i<3?'#FAFAFE':'white', border:`1.5px solid ${i<3?'#E0E7FF':'#F1F5F9'}`, borderRadius:12 }}>
+                        <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:8 }}>
+                          <span style={{ fontSize:i<3?20:13, fontWeight:700, minWidth:28, textAlign:'center' as const }}>{medal}</span>
+                          <span style={{ flex:1, fontSize:13, fontWeight:700, color:'#1E293B' }}>{app.link_name}</span>
+                          <span style={{ fontSize:14, fontWeight:900, color }}>{app.count}x</span>
                         </div>
-                        <div style={{ background: '#F1F5F9', borderRadius: 20, height: 6, overflow: 'hidden' }}>
-                          <div style={{ width: `${pct}%`, height: '100%', background: barColor, borderRadius: 20, transition: 'width 0.5s ease' }} />
+                        <div style={{ background:'#F1F5F9', borderRadius:20, height:7, overflow:'hidden' }}>
+                          <div style={{ width:`${pct}%`, height:'100%', background:color, borderRadius:20 }} />
                         </div>
                       </div>
                     )
@@ -1181,6 +1171,7 @@ export default function AdminPage() {
             )}
           </Section>
         )}
+
       </div>
 
       {/* MODALS */}

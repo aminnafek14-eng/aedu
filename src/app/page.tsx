@@ -369,6 +369,14 @@ export default function StudentHome() {
                 return (
                   <div key={l.id} className="app-card" onClick={() => {
                     if (!accessible) { setUpgradeTarget(l); return }
+                    // Track penggunaan apps
+                    if (student?.id) {
+                      supabase.from('app_usage').insert({
+                        student_id: student.id,
+                        link_id: l.id,
+                        link_name: l.name,
+                      }).then(() => {})
+                    }
                     setIframeLoading(true); setActiveLink(l)
                   }} style={{ cursor: accessible ? 'pointer' : 'not-allowed', animationDelay: `${li * 0.05}s`, opacity: accessible ? 1 : 0.75 }}>
                     <div style={{ background: 'white', borderRadius: 20, overflow: 'hidden', boxShadow: `0 6px 24px ${color.shadow}`, position: 'relative' }}>

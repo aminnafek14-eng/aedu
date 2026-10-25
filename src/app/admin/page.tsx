@@ -5,7 +5,6 @@ import { adminApi, uploadImageAdmin } from '@/lib/adminApi'
 import type { Folder, Link, Banner, Student } from '@/lib/supabase'
 
 type Tab = 'overview' | 'apps' | 'banners' | 'students' | 'requests' | 'payment' | 'usage' | 'report'
-const ADMIN_PW = '050505'
 
 // Lucide-style SVG icons (inline, no dependency)
 const Icons = {
@@ -29,9 +28,6 @@ const Icons = {
 }
 
 export default function AdminPage() {
-  const [authed, setAuthed] = useState(false)
-  const [pw, setPw] = useState('')
-  const [pwErr, setPwErr] = useState('')
   const [tab, setTab] = useState<Tab>('overview')
   const [links, setLinks] = useState<Link[]>([])
   const [banners, setBanners] = useState<Banner[]>([])
@@ -83,9 +79,9 @@ export default function AdminPage() {
     setLogs(prev => [{ msg, type, time }, ...prev].slice(0, 25))
   }
 
-  const login = () => {
-    if (pw === ADMIN_PW) { setAuthed(true); loadAll(); startPresenceWatch() }
-    else setPwErr('Kata laluan salah')
+  const logout = async () => {
+    await fetch('/api/auth/admin', { method: 'DELETE' })
+    window.location.href = '/admin/login'
   }
 
   const loadAll = async () => {
@@ -291,14 +287,16 @@ export default function AdminPage() {
     presenceRef.current = { unsubscribe: () => clearInterval(interval) } as any
   }
 
+  // Load data on mount (middleware already verified auth)
+  useEffect(() => { loadAll(); startPresenceWatch() }, [])
+
   useEffect(() => { return () => { presenceRef.current?.unsubscribe() } }, [])
 
   // ── REALTIME: semua perubahan data live ──
   useEffect(() => {
-    if (!authed) return
 
     const channel = supabase
-      .channel('aedu_admin_realtime')
+      .channel('aedu_admin_realtime_v2')
       // Payment requests - baru masuk
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'payment_requests' },
         (payload) => {
@@ -337,10 +335,10 @@ export default function AdminPage() {
       })
 
     return () => { supabase.removeChannel(channel) }
-  }, [authed])
+  }, [])
 
   useEffect(() => {
-    if (tab === 'report' && authed && appReport.length === 0) loadAppReport()
+    if (tab === 'report' && appReport.length === 0) loadAppReport()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, authed])
 
@@ -459,9 +457,6 @@ export default function AdminPage() {
   }
 
   const subscribedCount = students.filter(s => s.is_subscribed).length
-  const filteredStudents = students.filter(s =>
-    s.full_name.toLowerCase().includes(subSearch.toLowerCase()) || s.parent_phone.includes(subSearch)
-  )
 
   const Toggle = ({ on, onToggle, disabled }: { on: boolean; onToggle: () => void; disabled?: boolean }) => (
     <button onClick={onToggle} disabled={disabled} style={{
@@ -475,26 +470,6 @@ export default function AdminPage() {
         transition: 'left 0.3s', boxShadow: '0 1px 4px rgba(0,0,0,0.2)', display: 'block'
       }} />
     </button>
-  )
-
-  // LOGIN
-  if (!authed) return (
-    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg,#0F172A 0%,#1E1B4B 50%,#312E81 100%)', padding: 16 }}>
-      <div style={{ background: 'white', borderRadius: 24, padding: '44px 32px', width: '100%', maxWidth: 360, textAlign: 'center', boxShadow: '0 32px 80px rgba(0,0,0,0.4)' }}>
-        <img src="/logo.png" alt="AEdu" style={{ width: 90, height: 90, objectFit: 'contain', margin: '0 auto 20px', display: 'block' }} />
-        <h1 style={{ fontFamily: "'Plus Jakarta Sans',sans-serif", fontSize: 22, fontWeight: 900, color: '#0F172A', marginBottom: 4 }}>Panel Admin</h1>
-        <p style={{ color: '#94A3B8', fontSize: 13, marginBottom: 28 }}>AEdu — Akses Terhad</p>
-        <input type="password" style={{ width: '100%', padding: '13px 16px', border: '2px solid #E2E8F0', borderRadius: 12, fontSize: 18, letterSpacing: 8, textAlign: 'center', outline: 'none', marginBottom: 8, fontFamily: 'monospace' }}
-          placeholder="••••••" value={pw} onChange={e => setPw(e.target.value)} onKeyDown={e => e.key === 'Enter' && login()} />
-        {pwErr && <p style={{ color: '#EF4444', fontSize: 12, marginBottom: 8 }}>{pwErr}</p>}
-        <button style={{ width: '100%', padding: 13, background: 'linear-gradient(135deg,#4F46E5,#7C3AED)', color: 'white', border: 'none', borderRadius: 12, fontSize: 14, fontWeight: 700, cursor: 'pointer', marginBottom: 16 }} onClick={login}>
-          Log Masuk
-        </button>
-        <a href="/" style={{ fontSize: 12, color: '#94A3B8', textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
-          {Icons.logout} Kembali ke AEdu
-        </a>
-      </div>
-    </div>
   )
 
   const tabConfig: { key: Tab; label: string; icon: React.ReactNode }[] = [
@@ -573,9 +548,12 @@ export default function AdminPage() {
             <span style={{ width: 8, height: 8, background: '#10B981', borderRadius: '50%', display: 'inline-block', animation: 'pulse 2s infinite' }} />
             <span style={{ fontSize: 11, color: '#64748B', fontWeight: 600 }}>{online} dalam talian</span>
           </div>
-          <a href="/" style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#94A3B8', textDecoration: 'none', padding: '8px 10px', borderRadius: 8, background: '#F8FAFC', border: '1px solid #E2E8F0' }}>
+          <a href="/" style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#94A3B8', textDecoration: 'none', padding: '8px 10px', borderRadius: 8, background: '#F8FAFC', border: '1px solid #E2E8F0', marginBottom: 6 }}>
             {Icons.eye} Paparan Pelajar
           </a>
+          <button onClick={logout} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#EF4444', background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8, padding: '8px 10px', cursor: 'pointer', width: '100%' }}>
+            {Icons.logout} Log Keluar
+          </button>
         </div>
       </div>
 

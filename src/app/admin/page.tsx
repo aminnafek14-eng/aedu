@@ -340,7 +340,7 @@ export default function AdminPage() {
   useEffect(() => {
     if (tab === 'report' && appReport.length === 0) loadAppReport()
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, authed])
+  }, [tab])
 
   useEffect(() => {
     const c = canvasRef.current; if (!c) return

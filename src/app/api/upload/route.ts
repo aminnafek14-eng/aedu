@@ -2,12 +2,10 @@
 // Upload gambar melalui server menggunakan service role key
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
-
-const ADMIN_PW = process.env.ADMIN_PASSWORD || '050505'
+import { isAdminRequest } from '@/lib/adminAuth'
 
 export async function POST(req: NextRequest) {
-  const auth = req.headers.get('x-admin-key')
-  if (auth !== ADMIN_PW) {
+  if (!isAdminRequest(req)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

@@ -4,7 +4,7 @@ import { supabase } from '@/lib/supabase'
 import { adminApi, uploadImageAdmin } from '@/lib/adminApi'
 import type { Folder, Link, Banner, Student } from '@/lib/supabase'
 
-type Tab = 'overview' | 'apps' | 'banners' | 'students' | 'requests' | 'payment' | 'usage' | 'report'
+type Tab = 'overview' | 'apps' | 'banners' | 'students' | 'requests' | 'payment' | 'usage' | 'report' | 'affiliate'
 
 // Lucide-style SVG icons (inline, no dependency)
 const Icons = {
@@ -22,6 +22,7 @@ const Icons = {
   save: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>,
   logout: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>,
   activity: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>,
+  affiliate: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>,
   barchart: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>,
   eye: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>,
   upload: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg>,
@@ -47,6 +48,11 @@ export default function AdminPage() {
   const [studentUsage, setStudentUsage] = useState<any[]>([])
   const [appReport, setAppReport] = useState<any[]>([])
   const [usageLoading, setUsageLoading] = useState(false)
+
+  // Affiliate
+  const [affiliates, setAffiliates] = useState<any[]>([])
+  const [affLoading, setAffLoading] = useState(false)
+  const [affRateEdit, setAffRateEdit] = useState<Record<string, string>>({})
 
   // Realtime presence
   const [online, setOnline] = useState(0)
@@ -339,8 +345,40 @@ export default function AdminPage() {
 
   useEffect(() => {
     if (tab === 'report' && appReport.length === 0) loadAppReport()
+    if (tab === 'affiliate') loadAffiliates()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab])
+
+  const loadAffiliates = async () => {
+    setAffLoading(true)
+    try {
+      const { data } = await adminApi.affiliatesOverview()
+      setAffiliates(data || [])
+    } catch (e) { showToast('Gagal memuatkan affiliate: ' + String(e), 'error') }
+    setAffLoading(false)
+  }
+
+  const setAffiliateStatus = async (a: any, status: 'active' | 'suspended') => {
+    await adminApi.update('affiliates', a.id, { status })
+    showToast(status === 'active' ? `${a.full_name} diaktifkan` : `${a.full_name} digantung`, status === 'active' ? 'success' : '')
+    loadAffiliates()
+  }
+
+  const saveAffiliateRate = async (a: any) => {
+    const rate = Number(affRateEdit[a.id])
+    if (!(rate >= 0 && rate <= 100)) return showToast('Kadar mesti 0–100', 'error')
+    await adminApi.update('affiliates', a.id, { commission_rate: rate })
+    setAffRateEdit(r => { const n = { ...r }; delete n[a.id]; return n })
+    showToast(`Kadar ${a.full_name} → ${rate}%`, 'success')
+    loadAffiliates()
+  }
+
+  const markAffiliatePaid = async (a: any) => {
+    if (!confirm(`Tandakan komisen RM${Number(a.pending).toFixed(2)} untuk ${a.full_name} sebagai DIBAYAR?\n\nPastikan anda sudah membuat pemindahan ke akaun bank mereka.`)) return
+    const { data } = await adminApi.affiliateMarkPaid(a.id)
+    showToast(`${data?.count || 0} komisen ditandakan dibayar`, 'success')
+    loadAffiliates()
+  }
 
   useEffect(() => {
     const c = canvasRef.current; if (!c) return
@@ -482,6 +520,7 @@ export default function AdminPage() {
     { key: 'payment', label: 'Bayaran', icon: Icons.payment },
     { key: 'usage', label: 'Penggunaan', icon: Icons.activity },
     { key: 'report', label: 'Laporan Apps', icon: Icons.barchart },
+    { key: 'affiliate', label: 'Affiliate', icon: Icons.affiliate },
   ]
 
   return (
@@ -1145,6 +1184,83 @@ export default function AdminPage() {
                     )
                   })}
                 </div>
+              </div>
+            )}
+          </Section>
+        )}
+
+        {/* ── TAB AFFILIATE ── */}
+        {tab === 'affiliate' && (
+          <Section title={`Affiliate (${affiliates.length})`} action={
+            <button onClick={loadAffiliates} style={{ display:'flex', alignItems:'center', gap:6, padding:'8px 16px', background:'linear-gradient(135deg,#4F46E5,#6366F1)', color:'white', border:'none', borderRadius:10, fontSize:12, fontWeight:700, cursor:'pointer' }}>
+              🔄 Muat Semula
+            </button>
+          }>
+            <div style={{ display:'flex', gap:8, marginBottom:14, padding:'10px 14px', background:'#F0F9FF', borderRadius:10, border:'1px solid #BAE6FD', fontSize:12, color:'#0369A1', lineHeight:1.6 }}>
+              <span>ℹ️</span>
+              <span>Komisen dicipta automatik apabila anda <b>luluskan bayaran</b> murid yang dirujuk oleh affiliate <b>aktif</b>. Pautan pendaftaran affiliate: <b>/affiliate/daftar</b></span>
+            </div>
+            {affLoading ? (
+              <div style={{ textAlign:'center', padding:40, color:'#94A3B8' }}>⏳ Memuatkan...</div>
+            ) : affiliates.length === 0 ? (
+              <Empty msg="Belum ada affiliate berdaftar." />
+            ) : (
+              <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+                {affiliates.map((a: any) => {
+                  const stColor = a.status === 'active' ? '#10B981' : a.status === 'pending' ? '#D97706' : '#EF4444'
+                  const stLabel = a.status === 'active' ? 'Aktif' : a.status === 'pending' ? 'Menunggu' : 'Digantung'
+                  return (
+                    <div key={a.id} style={{ border:`1.5px solid ${a.status === 'pending' ? '#FDE68A' : '#E2E8F0'}`, borderRadius:12, padding:'12px 14px', background: a.status === 'pending' ? '#FFFBEB' : 'white' }}>
+                      <div style={{ display:'flex', alignItems:'flex-start', gap:10 }}>
+                        <div style={{ flex:1, minWidth:0 }}>
+                          <div style={{ display:'flex', alignItems:'center', gap:6, flexWrap:'wrap' }}>
+                            <span style={{ fontSize:14, fontWeight:800 }}>{a.full_name}</span>
+                            <span style={{ fontSize:10, fontFamily:'monospace', fontWeight:700, color:'#4F46E5', background:'#EEF2FF', padding:'1px 7px', borderRadius:6 }}>{a.code}</span>
+                            <span style={{ fontSize:10, fontWeight:800, color:stColor }}>● {stLabel}</span>
+                          </div>
+                          <div style={{ fontSize:11, color:'#94A3B8', marginTop:3 }}>{a.email} · 📞 {a.phone || '-'}</div>
+                          <div style={{ fontSize:11, color:'#64748B', marginTop:3 }}>
+                            🏦 {a.bank_name ? `${a.bank_name} · ${a.account_name || '-'} · ` : 'Tiada maklumat bank'}
+                            {a.account_number && <b style={{ fontFamily:'monospace' }}>{a.account_number}</b>}
+                          </div>
+                        </div>
+                        <div style={{ display:'flex', flexDirection:'column', gap:4, flexShrink:0 }}>
+                          {a.status !== 'active'
+                            ? <button onClick={() => setAffiliateStatus(a, 'active')} style={{ padding:'6px 12px', borderRadius:8, border:'none', background:'#10B981', color:'white', fontSize:11, fontWeight:700, cursor:'pointer' }}>✓ Aktifkan</button>
+                            : <button onClick={() => setAffiliateStatus(a, 'suspended')} style={{ padding:'6px 12px', borderRadius:8, border:'1px solid #FECACA', background:'#FEF2F2', color:'#EF4444', fontSize:11, fontWeight:700, cursor:'pointer' }}>Gantung</button>}
+                        </div>
+                      </div>
+                      <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:6, marginTop:10 }}>
+                        {[
+                          { l:'Daftar', v:String(a.signups) },
+                          { l:'Jualan', v:String(a.sales) },
+                          { l:'Belum bayar', v:`RM${Number(a.pending).toFixed(2)}`, c:'#D97706' },
+                          { l:'Dibayar', v:`RM${Number(a.paid).toFixed(2)}`, c:'#10B981' },
+                        ].map(x => (
+                          <div key={x.l} style={{ background:'#F8FAFC', borderRadius:8, padding:'6px 8px' }}>
+                            <div style={{ fontSize:9, color:'#94A3B8', fontWeight:700, textTransform:'uppercase' }}>{x.l}</div>
+                            <div style={{ fontSize:13, fontWeight:800, color:x.c || '#0F172A' }}>{x.v}</div>
+                          </div>
+                        ))}
+                      </div>
+                      <div style={{ display:'flex', alignItems:'center', gap:8, marginTop:10, flexWrap:'wrap' }}>
+                        <span style={{ fontSize:11, color:'#64748B', fontWeight:600 }}>Kadar komisen</span>
+                        <input type="number" min={0} max={100} value={affRateEdit[a.id] ?? String(Number(a.commission_rate))}
+                          onChange={e => setAffRateEdit(r => ({ ...r, [a.id]: e.target.value }))}
+                          style={{ width:64, padding:'5px 8px', border:'1.5px solid #E2E8F0', borderRadius:8, fontSize:12, fontWeight:700 }} />
+                        <span style={{ fontSize:11, color:'#64748B' }}>%</span>
+                        {affRateEdit[a.id] !== undefined && (
+                          <button onClick={() => saveAffiliateRate(a)} style={{ padding:'5px 10px', borderRadius:8, border:'none', background:'#4F46E5', color:'white', fontSize:11, fontWeight:700, cursor:'pointer' }}>Simpan</button>
+                        )}
+                        {Number(a.pending) > 0 && (
+                          <button onClick={() => markAffiliatePaid(a)} style={{ marginLeft:'auto', padding:'6px 12px', borderRadius:8, border:'none', background:'linear-gradient(135deg,#10B981,#059669)', color:'white', fontSize:11, fontWeight:700, cursor:'pointer' }}>
+                            💸 Tandakan RM{Number(a.pending).toFixed(2)} dibayar
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
             )}
           </Section>

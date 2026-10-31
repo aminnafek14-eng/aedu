@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
+import { getStoredRef } from '@/lib/referral'
 import { supabase, type Banner } from '@/lib/supabase'
 
 type LinkItem = {
@@ -596,6 +597,7 @@ export default function StudentHome() {
                       amount: payInfo.price,
                       proof_url: proofUrl || null,
                       status: 'pending',
+                      affiliate_code: getStoredRef(),
                     })
                     setPaymentSubmitted(true)
                   }} style={{

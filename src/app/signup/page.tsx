@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import { getStoredRef } from '@/lib/referral'
 import Link from 'next/link'
 
 type Step = 'form' | 'payment' | 'pending' | 'success'
@@ -70,6 +71,7 @@ export default function SignupPage() {
     const { error: err } = await supabase.from('students').insert({
       full_name: name, student_id: id, password,
       parent_phone: phoneClean, is_subscribed: false,
+      referred_by: getStoredRef(),
       subscription_note: withPayment ? `Menunggu pengesahan bayaran RM${payInfo.price}` : null,
     })
     if (err) { setError('Ralat pendaftaran. Cuba lagi.'); setLoading(false); return }

@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import './globals.css'
+import RefCapture from './RefCapture'
 
 export const metadata: Metadata = {
   title: 'AEdu — Portal Gamifikasi Pendidikan',
@@ -22,7 +23,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link rel="shortcut icon" href="/favicon.ico?v=2" />
         <link rel="apple-touch-icon" href="/favicon.png" />
       </head>
-      <body>{children}</body>
+      <body><RefCapture />{children}</body>
     </html>
   )
 }

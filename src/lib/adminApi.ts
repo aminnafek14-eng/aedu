@@ -2,14 +2,14 @@
 // Semua operasi admin melalui server API
 // Service role key TIDAK pernah keluar ke browser
 
-const ADMIN_KEY = '050505' // sama dengan ADMIN_PASSWORD
+// Pengesahan melalui cookie httpOnly 'admin_session' (dihantar automatik oleh browser).
+// Tiada kata laluan dalam kod browser.
 
 async function callAdmin(action: string, payload: Record<string, unknown>) {
   const res = await fetch('/api/admin', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'x-admin-key': ADMIN_KEY,
     },
     body: JSON.stringify({ action, ...payload }),
   })
@@ -33,6 +33,11 @@ export const adminApi = {
 
   deleteLinksByFolder: (folderId: string) =>
     callAdmin('delete_links_by_folder', { id: folderId }),
+
+  affiliatesOverview: () => callAdmin('affiliates_overview', {}),
+
+  affiliateMarkPaid: (affiliateId: string) =>
+    callAdmin('affiliate_mark_paid', { id: affiliateId }),
 }
 
 // ── Compress gambar sebelum upload ──
@@ -90,7 +95,6 @@ export async function uploadImageAdmin(file: File): Promise<string> {
   formData.append('file', compressed)
   const res = await fetch('/api/upload', {
     method: 'POST',
-    headers: { 'x-admin-key': ADMIN_KEY },
     body: formData,
   })
   const data = await res.json()

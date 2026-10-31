@@ -3,16 +3,10 @@
 // Service role key TIDAK pernah didedahkan kepada browser
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
-
-const ADMIN_PW = process.env.ADMIN_PASSWORD || '050505'
-
-function verifyAdmin(req: NextRequest): boolean {
-  const auth = req.headers.get('x-admin-key')
-  return auth === ADMIN_PW
-}
+import { isAdminRequest } from '@/lib/adminAuth'
 
 export async function POST(req: NextRequest) {
-  if (!verifyAdmin(req)) {
+  if (!isAdminRequest(req)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
@@ -44,6 +38,22 @@ export async function POST(req: NextRequest) {
         const { error } = await supabaseAdmin.from('links').delete().eq('folder_id', id)
         if (error) return NextResponse.json({ error: error.message }, { status: 400 })
         return NextResponse.json({ success: true })
+      }
+      // ── AFFILIATE ──
+      case 'affiliates_overview': {
+        const { data: result, error } = await supabaseAdmin.rpc('admin_affiliate_overview')
+        if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+        return NextResponse.json({ data: result })
+      }
+      case 'affiliate_mark_paid': {
+        // Tandakan SEMUA komisen belum dibayar bagi seorang affiliate sebagai dibayar
+        const { data: result, error } = await supabaseAdmin
+          .from('affiliate_commissions')
+          .update({ status: 'paid', paid_at: new Date().toISOString() })
+          .eq('affiliate_id', id).eq('status', 'pending')
+          .select('id')
+        if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+        return NextResponse.json({ data: { count: result?.length || 0 } })
       }
       default:
         return NextResponse.json({ error: 'Invalid action' }, { status: 400 })

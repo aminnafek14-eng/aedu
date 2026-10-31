@@ -1,7 +1,6 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
 import Link from 'next/link'
 
 type Mode = 'login' | 'forgot'
@@ -14,15 +13,9 @@ export default function LoginPage() {
   const [parentPhone, setParentPhone] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [forgotResults, setForgotResults] = useState<{ student_id: string; full_name: string }[]>([])
-  const [forgotResult, setForgotResult] = useState<{ student_id: string; full_name: string } | null>(null)
+  const [forgotResults, setForgotResults] = useState<{ student_id: string; password: string; full_name: string }[]>([])
+  const [forgotResult, setForgotResult] = useState<{ student_id: string; password: string; full_name: string } | null>(null)
   const [showPw, setShowPw] = useState(false)
-
-  const [adminWa, setAdminWa] = useState('')
-  useEffect(() => {
-    supabase.from('app_settings').select('value').eq('key', 'payment_whatsapp').maybeSingle()
-      .then(({ data }) => setAdminWa(data?.value || ''))
-  }, [])
 
   const handleLogin = async () => {
     if (!studentId.trim()) return setError('Masukkan ID murid')
@@ -123,7 +116,7 @@ export default function LoginPage() {
             <div style={{ background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: 12, padding: '12px 14px', marginBottom: 20, textAlign: 'center' }}>
               <div style={{ fontSize: 28, marginBottom: 4 }}>🔑</div>
               <div style={{ fontWeight: 700, fontSize: 14, color: '#1E40AF', marginBottom: 4 }}>Cari Kata Laluan</div>
-              <div style={{ fontSize: 12, color: '#3B82F6' }}>Masukkan nombor telefon ibu/bapa untuk dapatkan ID murid</div>
+              <div style={{ fontSize: 12, color: '#3B82F6' }}>Masukkan nombor telefon ibu/bapa untuk dapatkan ID dan kata laluan</div>
             </div>
             <div style={S.formGroup}>
               <label style={S.label}>Nombor Telefon Ibu/Bapa</label>
@@ -148,7 +141,7 @@ export default function LoginPage() {
             <div style={{ background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: 12, padding: '12px 14px', marginBottom: 20, textAlign: 'center' }}>
               <div style={{ fontSize: 24, marginBottom: 6 }}>👨‍👩‍👧‍👦</div>
               <div style={{ fontWeight: 700, fontSize: 14, color: '#1E40AF', marginBottom: 4 }}>Nombor ini mempunyai {forgotResults.length} akaun anak</div>
-              <div style={{ fontSize: 12, color: '#3B82F6' }}>Pilih nama anak untuk lihat ID murid</div>
+              <div style={{ fontSize: 12, color: '#3B82F6' }}>Pilih nama anak untuk lihat maklumat log masuk</div>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
               {forgotResults.map((r, i) => (
@@ -188,16 +181,11 @@ export default function LoginPage() {
                 <div style={{ fontSize: 11, color: '#64748B', marginBottom: 3, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>ID Murid</div>
                 <div style={{ fontFamily: 'monospace', fontSize: 20, fontWeight: 900, color: '#4F46E5', letterSpacing: 2 }}>{forgotResult.student_id}</div>
               </div>
-              <div style={{ background: 'white', borderRadius: 10, padding: '12px 16px', border: '1px solid #BBF7D0', fontSize: 12, color: '#475569', lineHeight: 1.6 }}>
-                🔒 Untuk keselamatan, kata laluan tidak dipaparkan. Jika terlupa, minta admin tetapkan kata laluan baru.
-                {adminWa && (
-                  <a href={`https://wa.me/${adminWa}?text=${encodeURIComponent(`Salam, saya ibu/bapa ${forgotResult.full_name} (ID: ${forgotResult.student_id}). Mohon reset kata laluan AEdu.`)}`}
-                    target="_blank" rel="noopener noreferrer"
-                    style={{ display: 'block', marginTop: 10, padding: '10px', background: '#DCFCE7', color: '#15803D', borderRadius: 10, fontWeight: 700, textDecoration: 'none', border: '1px solid #86EFAC' }}>
-                    💬 Minta reset melalui WhatsApp
-                  </a>
-                )}
+              <div style={{ background: 'white', borderRadius: 10, padding: '12px 16px', border: '1px solid #BBF7D0' }}>
+                <div style={{ fontSize: 11, color: '#64748B', marginBottom: 3, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Kata Laluan</div>
+                <div style={{ fontFamily: 'monospace', fontSize: 20, fontWeight: 900, color: '#7C3AED', letterSpacing: 2 }}>{forgotResult.password}</div>
               </div>
+              <div style={{ fontSize: 11, color: '#94A3B8', marginTop: 12 }}>Simpan maklumat ini dengan selamat 🔒</div>
             </div>
             <button style={S.btn} onClick={() => { setMode('login'); setStudentId(forgotResult.student_id); setError('') }}>
               Log Masuk Sekarang →

@@ -34,6 +34,17 @@ export const adminApi = {
   deleteLinksByFolder: (folderId: string) =>
     callAdmin('delete_links_by_folder', { id: folderId }),
 
+  // Baca jadual melalui server (service role). Pulangkan { data, error } seperti supabase-js.
+  /* eslint-disable @typescript-eslint/no-explicit-any */
+  select: async (table: string, opts: {
+    columns?: string; eq?: Record<string, unknown>; neq?: Record<string, unknown>
+    gte?: Record<string, unknown>; order?: string; ascending?: boolean; limit?: number
+  } = {}) => {
+    try { const r = await callAdmin('select', { table, opts }); return { data: r.data as any[], error: null } }
+    catch (e) { return { data: null as any[] | null, error: e as Error } }
+  },
+  /* eslint-enable @typescript-eslint/no-explicit-any */
+
   affiliatesOverview: () => callAdmin('affiliates_overview', {}),
 
   affiliateMarkPaid: (affiliateId: string) =>

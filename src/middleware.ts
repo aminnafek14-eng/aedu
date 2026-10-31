@@ -1,20 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { verifyToken, adminSecret, ADMIN_COOKIE } from '@/lib/session'
 
-export function middleware(req: NextRequest) {
+// Lindungi semua laluan /admin (kecuali /admin/login) di pelayan
+export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl
-
-  // Protect /admin routes (except /admin/login)
   if (pathname.startsWith('/admin') && pathname !== '/admin/login') {
-    const session = req.cookies.get('admin_session')?.value
-    const secret = process.env.ADMIN_SESSION_SECRET || 'aedu-admin-secret'
-
-    if (session !== secret) {
+    const ok = (await verifyToken(adminSecret(), req.cookies.get(ADMIN_COOKIE)?.value)) === 'admin'
+    if (!ok) {
       const loginUrl = req.nextUrl.clone()
       loginUrl.pathname = '/admin/login'
       return NextResponse.redirect(loginUrl)
     }
   }
-
   return NextResponse.next()
 }
 

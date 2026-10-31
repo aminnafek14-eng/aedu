@@ -92,11 +92,11 @@ export default function AdminPage() {
 
   const loadAll = async () => {
     const [{ data: l }, { data: b }, { data: s }, { data: settings }, { data: pr, error: prErr }] = await Promise.all([
-      supabase.from('links').select('*').order('order_num'),
+      adminApi.select('links', { order: 'order_num', ascending: true }),
       supabase.from('banners').select('*').order('order_num'),
-      supabase.from('students').select('*').order('created_at', { ascending: false }),
+      adminApi.select('students', { order: 'created_at' }),
       Promise.resolve({ data: null }),
-      supabase.from('payment_requests').select('*').eq('status','pending').order('created_at', { ascending: false }),
+      adminApi.select('payment_requests', { eq: { status: 'pending' }, order: 'created_at' }),
     ])
     if (prErr) console.error('payment_requests error:', prErr)
     console.log('payment_requests pending:', pr)
@@ -104,7 +104,7 @@ export default function AdminPage() {
     setBanners(b || []); setStudents(s || [])
     setPaymentRequests(pr || [])
     // Load all payment requests (history)
-    const { data: allPr, error: allPrErr } = await supabase.from('payment_requests').select('*').order('created_at', { ascending: false }).limit(50)
+    const { data: allPr, error: allPrErr } = await adminApi.select('payment_requests', { order: 'created_at', limit: 50 })
     if (allPrErr) console.error('all payment_requests error:', allPrErr)
     console.log('all payment_requests:', allPr)
     setAllPaymentRequests(allPr || [])
@@ -132,19 +132,14 @@ export default function AdminPage() {
   const loadUsageForStudent = async (s: any) => {
     setUsageLoading(true)
     setUsageSelectedStudent(s)
-    const { data } = await supabase
-      .from('app_usage')
-      .select('*')
-      .eq('student_id', s.id)
-      .order('opened_at', { ascending: false })
-      .limit(200)
+    const { data } = await adminApi.select('app_usage', { eq: { student_id: s.id }, order: 'opened_at', limit: 200 })
     setStudentUsage(data || [])
     setUsageLoading(false)
   }
 
   const loadAppReport = async () => {
     setUsageLoading(true)
-    const { data } = await supabase.from('app_usage').select('link_id, link_name')
+    const { data } = await adminApi.select('app_usage', { columns: 'link_id, link_name', limit: 5000 })
     if (data) {
       const counts: Record<string, { link_id: string; link_name: string; count: number }> = {}
       data.forEach((row: any) => {
@@ -200,7 +195,7 @@ export default function AdminPage() {
     const phone = newStudentPhone.trim()
     if (!name) return showToast('Masukkan nama murid', 'error')
     if (!phone) return showToast('Masukkan nombor telefon', 'error')
-    const { data: existing } = await supabase.from('students').select('id').eq('full_name', name).single()
+    const { data: existing } = await adminApi.select('students', { columns: 'id', eq: { full_name: name } }).then(r => ({ data: r.data?.[0] }))
     if (existing) return showToast('Nama sudah wujud', 'error')
     await adminApi.insert('students', {
       full_name: name, parent_phone: phone,
@@ -219,7 +214,7 @@ export default function AdminPage() {
     if (editStudentId.trim().length < 3) return showToast('ID mestilah sekurang-kurangnya 3 aksara', 'error')
     if (!editStudentPw.trim()) return showToast('Kata laluan tidak boleh kosong', 'error')
     // Check ID duplicate (exclude current student)
-    const { data: existing } = await supabase.from('students').select('id').eq('student_id', editStudentId.trim().toLowerCase()).neq('id', s.id).maybeSingle()
+    const { data: existing } = await adminApi.select('students', { columns: 'id', eq: { student_id: editStudentId.trim().toLowerCase() }, neq: { id: s.id } }).then(r => ({ data: r.data?.[0] }))
     if (existing) return showToast('ID ini sudah digunakan murid lain', 'error')
     await adminApi.update('students', s.id, {
       student_id: editStudentId.trim().toLowerCase(),
@@ -276,11 +271,7 @@ export default function AdminPage() {
     const countOnline = async () => {
       // Kira murid yang last_seen dalam 5 minit lepas
       const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString()
-      const { data, error } = await supabase
-        .from('students')
-        .select('id, full_name, last_seen')
-        .gte('last_seen', fiveMinAgo)
-        .order('last_seen', { ascending: false })
+      const { data, error } = await adminApi.select('students', { columns: 'id, full_name, last_seen', gte: { last_seen: fiveMinAgo }, order: 'last_seen' })
       if (error) { console.error('last_seen error:', error); return }
       const count = data?.length || 0
       const names = (data || []).map((s: any) => s.full_name)
@@ -298,49 +289,24 @@ export default function AdminPage() {
 
   useEffect(() => { return () => { presenceRef.current?.unsubscribe() } }, [])
 
-  // ── REALTIME: semua perubahan data live ──
+  // ── POLLING: semak data baru setiap 30 saat ──
+  // (Jadual murid & bayaran kini dikunci daripada kunci awam, jadi Realtime
+  //  tidak lagi digunakan. Semua bacaan melalui /api/admin.)
+  const seenPending = useRef<Set<string> | null>(null)
   useEffect(() => {
-
-    const channel = supabase
-      .channel('aedu_admin_realtime_v2')
-      // Payment requests - baru masuk
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'payment_requests' },
-        (payload) => {
-          const req = payload.new as any
-          addLog(`💳 Permintaan baru: ${req.full_name} (RM${req.amount})`, 'join')
-          loadAll()
-        }
-      )
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'payment_requests' },
-        () => { loadAll() }
-      )
-      // Students - daftar baru
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'students' },
-        (payload) => {
-          const s = payload.new as any
-          addLog(`👤 Murid baru: ${s.full_name}`, 'join')
-          loadAll()
-        }
-      )
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'students' },
-        () => { loadAll() }
-      )
-      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'students' },
-        () => { loadAll() }
-      )
-      // Links - aktiviti baru/ubah
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'links' },
-        () => { loadAll() }
-      )
-      // Banners
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'banners' },
-        () => { loadAll() }
-      )
-      .subscribe((status) => {
-        console.log('Admin realtime:', status)
-      })
-
-    return () => { supabase.removeChannel(channel) }
+    const t = setInterval(async () => {
+      const { data } = await adminApi.select('payment_requests', { columns: 'id, full_name, amount', eq: { status: 'pending' } })
+      if (!data) return
+      const ids = new Set(data.map((r: any) => r.id as string))
+      if (seenPending.current) {
+        const fresh = data.filter((r: any) => !seenPending.current!.has(r.id))
+        fresh.forEach((r: any) => addLog(`💳 Permintaan baru: ${r.full_name} (RM${r.amount})`, 'join'))
+        if (fresh.length || ids.size !== seenPending.current.size) loadAll()
+      }
+      seenPending.current = ids
+    }, 30 * 1000)
+    return () => clearInterval(t)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {

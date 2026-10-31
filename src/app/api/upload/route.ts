@@ -1,11 +1,11 @@
 // ── Upload API Route ──
 // Upload gambar melalui server menggunakan service role key
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase'
+import { supabaseAdmin } from '@/lib/supabaseServer'
 import { isAdminRequest } from '@/lib/adminAuth'
 
 export async function POST(req: NextRequest) {
-  if (!isAdminRequest(req)) {
+  if (!(await isAdminRequest(req))) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

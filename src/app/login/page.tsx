@@ -14,39 +14,31 @@ export default function LoginPage() {
   const [parentPhone, setParentPhone] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [forgotResults, setForgotResults] = useState<{ student_id: string; password: string; full_name: string }[]>([])
-  const [forgotResult, setForgotResult] = useState<{ student_id: string; password: string; full_name: string } | null>(null)
+  const [forgotResults, setForgotResults] = useState<{ student_id: string; full_name: string }[]>([])
+  const [forgotResult, setForgotResult] = useState<{ student_id: string; full_name: string } | null>(null)
   const [showPw, setShowPw] = useState(false)
+
+  const [adminWa, setAdminWa] = useState('')
+  useEffect(() => {
+    supabase.from('app_settings').select('value').eq('key', 'payment_whatsapp').maybeSingle()
+      .then(({ data }) => setAdminWa(data?.value || ''))
+  }, [])
 
   const handleLogin = async () => {
     if (!studentId.trim()) return setError('Masukkan ID murid')
     if (!password.trim()) return setError('Masukkan kata laluan')
     setLoading(true); setError('')
 
-    const { data, error: err } = await supabase
-      .from('students').select('*')
-      .eq('student_id', studentId.trim().toLowerCase())
-      .single()
-
-    if (err || !data) {
-      setError('ID tidak dijumpai. Semak semula atau daftar dahulu.')
-      setLoading(false); return
-    }
-    if (data.password !== password) {
-      setError('Kata laluan salah. Cuba lagi.')
-      setLoading(false); return
-    }
-
-
-    // Update last_login
-    await supabase.from('students').update({ last_login: new Date().toISOString() }).eq('id', data.id)
-
-    const sessionData = JSON.stringify({
-      id: data.id, full_name: data.full_name,
-      student_id: data.student_id,
-      is_subscribed: data.is_subscribed,
-      is_premium: data.is_premium || false,
+    // Kata laluan disemak di PELAYAN — tiada data murid dimuat turun ke browser
+    const res = await fetch('/api/student/login', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ student_id: studentId.trim().toLowerCase(), password }),
     })
+    const json = await res.json().catch(() => ({}))
+    if (!res.ok) { setError(json.error || 'Gagal log masuk. Cuba lagi.'); setLoading(false); return }
+
+    // Simpan maklumat paparan sahaja (nama dsb). Akses sebenar ditentukan oleh cookie di pelayan.
+    const sessionData = JSON.stringify(json.student)
     sessionStorage.setItem('aedu_student', sessionData)
     localStorage.setItem('aedu_student', sessionData)
     router.replace('/')
@@ -56,33 +48,14 @@ export default function LoginPage() {
   const handleForgot = async () => {
     if (!parentPhone.trim()) return setError('Masukkan nombor telefon ibu/bapa')
     setLoading(true); setError('')
-
-    const digitsOnly = parentPhone.trim().replace(/[^0-9]/g, '')
-
-    const { data: allStudents } = await supabase
-      .from('students')
-      .select('student_id, password, full_name, parent_phone')
-
-    if (!allStudents || allStudents.length === 0) {
-      setError('Tiada murid dalam sistem.')
-      setLoading(false); return
-    }
-
-    // Cari SEMUA murid dengan nombor telefon yang sama
-    const matched = allStudents.filter((s: { parent_phone: string }) => {
-      const storedDigits = (s.parent_phone || '').replace(/[^0-9]/g, '')
-      return storedDigits === digitsOnly
+    const res = await fetch('/api/student/forgot', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone: parentPhone }),
     })
-
-    if (matched.length === 0) {
-      setError('Nombor telefon tidak dijumpai. Pastikan nombor yang didaftarkan dimasukkan.')
-    } else if (matched.length === 1) {
-      // Hanya satu murid — terus papar
-      setForgotResult(matched[0] as { student_id: string; password: string; full_name: string })
-    } else {
-      // Lebih dari satu murid — tunjuk senarai untuk dipilih
-      setForgotResults(matched as { student_id: string; password: string; full_name: string }[])
-    }
+    const json = await res.json().catch(() => ({}))
+    if (!res.ok) setError(json.error || 'Ralat. Cuba lagi.')
+    else if (json.results.length === 1) setForgotResult(json.results[0])
+    else setForgotResults(json.results)
     setLoading(false)
   }
 
@@ -150,7 +123,7 @@ export default function LoginPage() {
             <div style={{ background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: 12, padding: '12px 14px', marginBottom: 20, textAlign: 'center' }}>
               <div style={{ fontSize: 28, marginBottom: 4 }}>🔑</div>
               <div style={{ fontWeight: 700, fontSize: 14, color: '#1E40AF', marginBottom: 4 }}>Cari Kata Laluan</div>
-              <div style={{ fontSize: 12, color: '#3B82F6' }}>Masukkan nombor telefon ibu/bapa untuk dapatkan ID dan kata laluan</div>
+              <div style={{ fontSize: 12, color: '#3B82F6' }}>Masukkan nombor telefon ibu/bapa untuk dapatkan ID murid</div>
             </div>
             <div style={S.formGroup}>
               <label style={S.label}>Nombor Telefon Ibu/Bapa</label>
@@ -175,7 +148,7 @@ export default function LoginPage() {
             <div style={{ background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: 12, padding: '12px 14px', marginBottom: 20, textAlign: 'center' }}>
               <div style={{ fontSize: 24, marginBottom: 6 }}>👨‍👩‍👧‍👦</div>
               <div style={{ fontWeight: 700, fontSize: 14, color: '#1E40AF', marginBottom: 4 }}>Nombor ini mempunyai {forgotResults.length} akaun anak</div>
-              <div style={{ fontSize: 12, color: '#3B82F6' }}>Pilih nama anak untuk lihat maklumat log masuk</div>
+              <div style={{ fontSize: 12, color: '#3B82F6' }}>Pilih nama anak untuk lihat ID murid</div>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
               {forgotResults.map((r, i) => (
@@ -215,11 +188,16 @@ export default function LoginPage() {
                 <div style={{ fontSize: 11, color: '#64748B', marginBottom: 3, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>ID Murid</div>
                 <div style={{ fontFamily: 'monospace', fontSize: 20, fontWeight: 900, color: '#4F46E5', letterSpacing: 2 }}>{forgotResult.student_id}</div>
               </div>
-              <div style={{ background: 'white', borderRadius: 10, padding: '12px 16px', border: '1px solid #BBF7D0' }}>
-                <div style={{ fontSize: 11, color: '#64748B', marginBottom: 3, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Kata Laluan</div>
-                <div style={{ fontFamily: 'monospace', fontSize: 20, fontWeight: 900, color: '#7C3AED', letterSpacing: 2 }}>{forgotResult.password}</div>
+              <div style={{ background: 'white', borderRadius: 10, padding: '12px 16px', border: '1px solid #BBF7D0', fontSize: 12, color: '#475569', lineHeight: 1.6 }}>
+                🔒 Untuk keselamatan, kata laluan tidak dipaparkan. Jika terlupa, minta admin tetapkan kata laluan baru.
+                {adminWa && (
+                  <a href={`https://wa.me/${adminWa}?text=${encodeURIComponent(`Salam, saya ibu/bapa ${forgotResult.full_name} (ID: ${forgotResult.student_id}). Mohon reset kata laluan AEdu.`)}`}
+                    target="_blank" rel="noopener noreferrer"
+                    style={{ display: 'block', marginTop: 10, padding: '10px', background: '#DCFCE7', color: '#15803D', borderRadius: 10, fontWeight: 700, textDecoration: 'none', border: '1px solid #86EFAC' }}>
+                    💬 Minta reset melalui WhatsApp
+                  </a>
+                )}
               </div>
-              <div style={{ fontSize: 11, color: '#94A3B8', marginTop: 12 }}>Simpan maklumat ini dengan selamat 🔒</div>
             </div>
             <button style={S.btn} onClick={() => { setMode('login'); setStudentId(forgotResult.student_id); setError('') }}>
               Log Masuk Sekarang →

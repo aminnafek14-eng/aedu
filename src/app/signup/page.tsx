@@ -52,29 +52,22 @@ export default function SignupPage() {
     if (!password || password.length < 4) return setError('Kata laluan mestilah sekurang-kurangnya 4 aksara')
     if (password !== confirmPassword) return setError('Kata laluan tidak sepadan')
     if (!phoneClean || phoneClean.length < 9) return setError('Masukkan nombor telefon yang sah')
-    setLoading(true); setError('')
-
-    // Check duplicate ID
-    const { data: existId } = await supabase.from('students').select('id').eq('student_id', id).single()
-    if (existId) { setLoading(false); return setError('ID ini sudah digunakan. Pilih ID lain.') }
-
-    // Check duplicate name
-    const { data: existName } = await supabase.from('students').select('id').eq('full_name', name).single()
-    if (existName) { setLoading(false); return setError('Nama ini sudah berdaftar.') }
-
     setLoading(false)
     await registerStudent(name, id, phoneClean, false)
   }
 
   const registerStudent = async (name: string, id: string, phoneClean: string, withPayment: boolean) => {
-    setLoading(true)
-    const { error: err } = await supabase.from('students').insert({
-      full_name: name, student_id: id, password,
-      parent_phone: phoneClean, is_subscribed: false,
-      referred_by: getStoredRef(),
-      subscription_note: withPayment ? `Menunggu pengesahan bayaran RM${payInfo.price}` : null,
+    setLoading(true); setError('')
+    // Pendaftaran melalui pelayan — semakan pendua & simpanan berlaku di server
+    const res = await fetch('/api/student/signup', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        full_name: name, student_id: id, password, parent_phone: phoneClean,
+        referred_by: getStoredRef(), with_payment: withPayment, price: payInfo.price,
+      }),
     })
-    if (err) { setError('Ralat pendaftaran. Cuba lagi.'); setLoading(false); return }
+    const json = await res.json().catch(() => ({}))
+    if (!res.ok) { setError(json.error || 'Ralat pendaftaran. Cuba lagi.'); setLoading(false); return }
     setStep(withPayment ? 'pending' : 'success')
     setLoading(false)
   }

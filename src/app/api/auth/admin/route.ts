@@ -1,33 +1,36 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { signToken, safeEqual, adminSecret, ADMIN_COOKIE, ADMIN_TTL } from '@/lib/session'
 
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '050505'
-const ADMIN_SESSION_SECRET = process.env.ADMIN_SESSION_SECRET || 'aedu-admin-secret'
+// Kata laluan & rahsia HANYA dari environment variable Vercel — tiada nilai lalai dalam kod.
 
 // POST /api/auth/admin — login
 export async function POST(req: NextRequest) {
-  const { password } = await req.json()
+  const expected = process.env.ADMIN_PASSWORD || ''
+  const secret = adminSecret()
+  if (!expected || !secret) {
+    return NextResponse.json({ error: 'Pelayan belum dikonfigurasi (ADMIN_PASSWORD / ADMIN_SESSION_SECRET)' }, { status: 500 })
+  }
 
-  if (password !== ADMIN_PASSWORD) {
+  const { password } = await req.json().catch(() => ({ password: '' }))
+  if (typeof password !== 'string' || !safeEqual(password, expected)) {
+    await new Promise(r => setTimeout(r, 800)) // perlahankan cubaan meneka
     return NextResponse.json({ error: 'Kata laluan salah' }, { status: 401 })
   }
 
   const res = NextResponse.json({ success: true })
-
-  // Set httpOnly cookie — tidak boleh dicuri via JavaScript
-  res.cookies.set('admin_session', ADMIN_SESSION_SECRET, {
+  res.cookies.set(ADMIN_COOKIE, await signToken(secret, 'admin', ADMIN_TTL), {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'strict',
-    maxAge: 60 * 60 * 8, // 8 jam
+    maxAge: ADMIN_TTL,
     path: '/',
   })
-
   return res
 }
 
 // DELETE /api/auth/admin — logout
 export async function DELETE() {
   const res = NextResponse.json({ success: true })
-  res.cookies.delete('admin_session')
+  res.cookies.delete(ADMIN_COOKIE)
   return res
 }

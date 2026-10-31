@@ -2,7 +2,6 @@ import { createClient } from '@supabase/supabase-js'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 
 // ── CLIENT untuk murid (anon key) — guna dalam browser ──
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
@@ -13,15 +12,7 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   }
 })
 
-// ── CLIENT untuk admin (service role) — HANYA guna dalam server API routes ──
-// Key ini TIDAK pernah sampai ke browser
-export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
-  auth: {
-    storageKey: 'aedu-admin',
-    autoRefreshToken: false,
-    persistSession: false,
-  }
-})
+// Service role client dipindahkan ke '@/lib/supabaseServer' (server sahaja).
 
 export type Folder = {
   id: string

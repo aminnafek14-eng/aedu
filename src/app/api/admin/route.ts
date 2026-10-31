@@ -2,15 +2,22 @@
 // Semua operasi tulis admin melalui sini
 // Service role key TIDAK pernah didedahkan kepada browser
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase'
+import { supabaseAdmin } from '@/lib/supabaseServer'
 import { isAdminRequest } from '@/lib/adminAuth'
 
 export async function POST(req: NextRequest) {
-  if (!isAdminRequest(req)) {
+  if (!(await isAdminRequest(req))) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const { action, table, data, id } = await req.json()
+  const body = await req.json()
+  const { action, table, data, id } = body
+
+  // Hanya jadual ini boleh diakses melalui API admin
+  const TABLES = ['links', 'folders', 'banners', 'students', 'payment_requests', 'app_settings', 'app_usage', 'affiliates', 'affiliate_commissions']
+  if (table !== undefined && !TABLES.includes(table)) {
+    return NextResponse.json({ error: 'Jadual tidak dibenarkan' }, { status: 400 })
+  }
 
   try {
     switch (action) {
@@ -38,6 +45,19 @@ export async function POST(req: NextRequest) {
         const { error } = await supabaseAdmin.from('links').delete().eq('folder_id', id)
         if (error) return NextResponse.json({ error: error.message }, { status: 400 })
         return NextResponse.json({ success: true })
+      }
+      case 'select': {
+        // Baca data (service role). opts: columns, eq, neq, gte, order, ascending, limit
+        const o = body.opts || {}
+        let q = supabaseAdmin.from(table).select(typeof o.columns === 'string' ? o.columns : '*')
+        for (const [k, v] of Object.entries(o.eq || {}))  q = q.eq(k, v as string)
+        for (const [k, v] of Object.entries(o.neq || {})) q = q.neq(k, v as string)
+        for (const [k, v] of Object.entries(o.gte || {})) q = q.gte(k, v as string)
+        if (o.order) q = q.order(o.order, { ascending: !!o.ascending })
+        if (o.limit) q = q.limit(Math.min(Number(o.limit) || 1000, 5000))
+        const { data: result, error } = await q
+        if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+        return NextResponse.json({ data: result })
       }
       // ── AFFILIATE ──
       case 'affiliates_overview': {

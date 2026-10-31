@@ -52,75 +52,57 @@ export default function StudentHome() {
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
   const iframeRef = useRef<HTMLIFrameElement>(null)
 
-  useEffect(() => {
-    const saved = localStorage.getItem('aedu_student') || sessionStorage.getItem('aedu_student')
-    if (!saved) { router.replace('/login'); return }
-    const s = JSON.parse(saved)
-    localStorage.setItem('aedu_student', saved)
-    setStudent(s)
-    loadData().then(() => startHeartbeat(s))
-    const timeout = setTimeout(() => setLoading(false), 5000)
-    return () => { channelRef.current?.unsubscribe(); clearTimeout(timeout) }
-  }, [])
-
-  // Heartbeat: update last_seen setiap 2 minit
-  // Tiada WebSocket — hanya HTTP request biasa
-  const startHeartbeat = (s: StudentSession) => {
-    const ping = async () => {
-      const { error } = await supabase
-        .from('students')
-        .update({ last_seen: new Date().toISOString() })
-        .eq('id', s.id)
-      if (error) console.error('Heartbeat error:', error)
-    }
-    ping() // terus ping bila login
-    const interval = setInterval(ping, 2 * 60 * 1000) // setiap 2 minit
-    channelRef.current = { unsubscribe: () => clearInterval(interval) } as any
+  // Sesi sebenar = cookie httpOnly di pelayan. localStorage hanya untuk paparan pantas.
+  const applyStudent = (data: StudentSession) => {
+    const json = JSON.stringify({ id: data.id, full_name: data.full_name, student_id: data.student_id, is_subscribed: data.is_subscribed, is_premium: data.is_premium })
+    sessionStorage.setItem('aedu_student', json)
+    localStorage.setItem('aedu_student', json)
+    setStudent(prev => (prev && prev.is_premium === data.is_premium && prev.is_subscribed === data.is_subscribed && prev.id === data.id) ? prev : data)
   }
 
-  // ── MURID: POLLING SAHAJA — tiada Realtime WebSocket ──
-  // 500 murid = 0 Realtime connections dari murid
-  // Admin kekal 1 Realtime connection sahaja
+  const goLogin = () => {
+    sessionStorage.removeItem('aedu_student'); localStorage.removeItem('aedu_student')
+    router.replace('/login')
+  }
+
+  // Profil dari pelayan (juga heartbeat last_seen). Status premium SENTIASA dari DB.
+  const fetchMe = async (): Promise<boolean> => {
+    try {
+      const res = await fetch('/api/student/me', { cache: 'no-store' })
+      if (res.status === 401) { goLogin(); return false }
+      if (res.ok) applyStudent((await res.json()).student)
+    } catch { /* rangkaian terputus — cuba lagi kemudian */ }
+    return true
+  }
+
   useEffect(() => {
-    if (!student) return
+    const saved = localStorage.getItem('aedu_student') || sessionStorage.getItem('aedu_student')
+    if (saved) { try { setStudent(JSON.parse(saved)) } catch { /* abaikan */ } }
+    fetchMe().then(ok => { if (ok) loadData() })
+    const timeout = setTimeout(() => setLoading(false), 5000)
+    return () => { channelRef.current?.unsubscribe(); clearTimeout(timeout) }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
-    // Poll premium status setiap 30 saat
-    const premiumInterval = setInterval(async () => {
-      const { data } = await supabase
-        .from('students')
-        .select('id, full_name, student_id, is_subscribed, is_premium')
-        .eq('id', student.id)
-        .single()
-      if (data) {
-        const newSession = JSON.stringify({
-          id: data.id, full_name: data.full_name,
-          student_id: data.student_id,
-          is_subscribed: data.is_subscribed,
-          is_premium: data.is_premium,
-        })
-        sessionStorage.setItem('aedu_student', newSession)
-        localStorage.setItem('aedu_student', newSession)
-        // Hanya update state jika ada perubahan
-        if (data.is_premium !== student.is_premium || data.is_subscribed !== student.is_subscribed) {
-          setStudent(data as StudentSession)
-        }
-      }
-    }, 30 * 1000) // 30 saat
-
-    // Poll apps & content setiap 5 minit
-    const contentInterval = setInterval(() => {
-      loadData()
-    }, 5 * 60 * 1000) // 5 minit
-
+  // ── POLLING RINGAN ──
+  // /api/student/me setiap 2 minit (heartbeat + status premium) dan bila tab dibuka semula.
+  useEffect(() => {
+    if (!student?.id) return
+    const meInterval = setInterval(fetchMe, 2 * 60 * 1000)
+    const onVisible = () => { if (document.visibilityState === 'visible') fetchMe() }
+    document.addEventListener('visibilitychange', onVisible)
+    const contentInterval = setInterval(() => { loadData() }, 5 * 60 * 1000)
+    channelRef.current = { unsubscribe: () => { clearInterval(meInterval); clearInterval(contentInterval) } } as any
     return () => {
-      clearInterval(premiumInterval)
-      clearInterval(contentInterval)
+      clearInterval(meInterval); clearInterval(contentInterval)
+      document.removeEventListener('visibilitychange', onVisible)
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [student?.id])
 
   const loadData = async () => {
     const [{ data: l }, { data: b }, { data: settings }] = await Promise.all([
-      supabase.from('links').select('*').order('order_num'),
+      supabase.from('links').select('id, name, content_type, img_url, emoji, tags, access_type, folder_id, order_num').order('order_num'),
       supabase.from('banners').select('*').eq('active', true).order('order_num'),
       supabase.from('app_settings').select('key,value'),
     ])
@@ -142,23 +124,8 @@ export default function StudentHome() {
     setLoading(false)
   }
 
-  const refreshStudentSession = async (studentId: string) => {
-    // Refresh student data dari DB (premium status, subscription dll)
-    const { data } = await supabase.from('students')
-      .select('id, full_name, student_id, is_subscribed, is_premium')
-      .eq('id', studentId).single()
-    if (data) {
-      const updated = JSON.stringify({
-        id: data.id, full_name: data.full_name,
-        student_id: data.student_id,
-        is_subscribed: data.is_subscribed,
-        is_premium: data.is_premium,
-      })
-      sessionStorage.setItem('aedu_student', updated)
-      localStorage.setItem('aedu_student', updated)
-      setStudent(data as StudentSession)
-    }
-  }
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const refreshStudentSession = async (_studentId?: string) => { await fetchMe() }
 
   useEffect(() => {
     if (banners.length <= 1) return
@@ -168,8 +135,7 @@ export default function StudentHome() {
 
   const logout = () => {
     channelRef.current?.unsubscribe()
-    sessionStorage.removeItem('aedu_student'); localStorage.removeItem('aedu_student')
-    router.replace('/login')
+    fetch('/api/student/logout', { method: 'POST' }).finally(goLogin)
   }
 
   // Get unique subjects (non-year tags)
@@ -191,6 +157,17 @@ export default function StudentHome() {
     const yearMatch = filterYear === 'Semua' || tags.includes(filterYear)
     return subjectMatch && yearMatch
   })
+
+  // Kod game hanya diambil dari pelayan SELEPAS kelayakan disemak (/api/play).
+  const openActivity = async (l: LinkItem) => {
+    setIframeLoading(true); setActiveLink({ ...l, url: null, html_content: null })
+    const res = await fetch(`/api/play?id=${encodeURIComponent(l.id)}`, { cache: 'no-store' })
+    if (res.status === 401) { setActiveLink(null); goLogin(); return }
+    if (res.status === 403) { setActiveLink(null); setIframeLoading(false); fetchMe(); setUpgradeTarget(l); return }
+    if (!res.ok) { setActiveLink(null); setIframeLoading(false); alert('Gagal membuka aktiviti. Cuba lagi.'); return }
+    const c = await res.json()
+    setActiveLink(cur => cur && cur.id === l.id ? { ...cur, content_type: c.content_type, url: c.url, html_content: c.html_content } : cur)
+  }
 
   const canAccess = (link: LinkItem) => {
     if (link.access_type !== 'premium') return true
@@ -370,15 +347,7 @@ export default function StudentHome() {
                 return (
                   <div key={l.id} className="app-card" onClick={() => {
                     if (!accessible) { setUpgradeTarget(l); return }
-                    // Track penggunaan apps
-                    if (student?.id) {
-                      supabase.from('app_usage').insert({
-                        student_id: student.id,
-                        link_id: l.id,
-                        link_name: l.name,
-                      }).then(() => {})
-                    }
-                    setIframeLoading(true); setActiveLink(l)
+                    openActivity(l)
                   }} style={{ cursor: accessible ? 'pointer' : 'not-allowed', animationDelay: `${li * 0.05}s`, opacity: accessible ? 1 : 0.75 }}>
                     <div style={{ background: 'white', borderRadius: 20, overflow: 'hidden', boxShadow: `0 6px 24px ${color.shadow}`, position: 'relative' }}>
                       {/* Icon area */}
@@ -587,18 +556,13 @@ export default function StudentHome() {
 
                   <button onClick={async () => {
                     if (!student) return
-                    // Submit payment request
-                    const { data: studentData } = await supabase
-                      .from('students').select('parent_phone').eq('id', student.id).single()
-                    await supabase.from('payment_requests').insert({
-                      student_id: student.id,
-                      full_name: student.full_name,
-                      parent_phone: studentData?.parent_phone || '',
-                      amount: payInfo.price,
-                      proof_url: proofUrl || null,
-                      status: 'pending',
-                      affiliate_code: getStoredRef(),
+                    // Hantar permintaan melalui pelayan (nama/telefon/harga diambil dari DB)
+                    const res = await fetch('/api/student/payment', {
+                      method: 'POST', headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ proof_url: proofUrl || null, affiliate_code: getStoredRef() }),
                     })
+                    if (res.status === 401) { goLogin(); return }
+                    if (!res.ok) { alert('Gagal menghantar. Cuba lagi.'); return }
                     setPaymentSubmitted(true)
                   }} style={{
                     width: '100%', padding: '15px', background: 'linear-gradient(135deg,#10B981,#059669)',
@@ -656,7 +620,9 @@ export default function StudentHome() {
             {activeLink.content_type === 'url' && activeLink.url && <a href={activeLink.url} target="_blank" rel="noopener noreferrer" style={{ padding: '6px 12px', background: 'rgba(255,255,255,0.15)', border: '1px solid rgba(255,255,255,0.25)', borderRadius: 10, color: 'white', fontSize: 13, textDecoration: 'none', flexShrink: 0 }}>↗</a>}
           </div>
           {iframeLoading && <div style={{ height: 3, background: '#EEF2FF', flexShrink: 0 }}><div style={{ height: '100%', background: 'linear-gradient(90deg,#4F46E5,#06B6D4)', animation: 'loadbar 1.5s ease infinite' }} /></div>}
-          {activeLink.content_type === 'html'
+          {!activeLink.html_content && !activeLink.url
+            ? <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94A3B8', fontSize: 14, fontWeight: 600, background: 'white' }}>⏳ Memuatkan aktiviti...</div>
+            : activeLink.content_type === 'html'
             ? <iframe ref={iframeRef} srcDoc={activeLink.html_content || ''} style={{ flex: 1, width: '100%', border: 'none', display: 'block' }} title={activeLink.name} onLoad={() => setIframeLoading(false)} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-pointer-lock" />
             : <iframe ref={iframeRef} src={activeLink.url || ''} style={{ flex: 1, width: '100%', border: 'none', display: 'block' }} title={activeLink.name} onLoad={() => setIframeLoading(false)} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-presentation" />}
         </div>

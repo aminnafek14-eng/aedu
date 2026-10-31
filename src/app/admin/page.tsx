@@ -92,7 +92,8 @@ export default function AdminPage() {
 
   const loadAll = async () => {
     const [{ data: l }, { data: b }, { data: s }, { data: settings }, { data: pr, error: prErr }] = await Promise.all([
-      adminApi.select('links', { order: 'order_num', ascending: true }),
+      // Tanpa html_content (boleh beberapa MB) — kod diambil hanya bila butang Edit ditekan
+      adminApi.select('links', { columns: 'id, folder_id, name, url, content_type, img_url, emoji, tags, access_type, order_num, created_at', order: 'order_num', ascending: true }),
       supabase.from('banners').select('*').order('order_num'),
       adminApi.select('students', { order: 'created_at' }),
       Promise.resolve({ data: null }),
@@ -181,13 +182,20 @@ export default function AdminPage() {
     setSavingPaySettings(false)
   }
 
+  // ── Kemas kini SERTA-MERTA di skrin, simpan di belakang, undur jika gagal ──
+  const patchStudentLocal = (id: string, patch: Record<string, unknown>) =>
+    setStudents(prev => prev.map(st => st.id === id ? { ...st, ...patch } : st))
+
   const toggleStudentSub = async (studentId: string, current: boolean, name: string) => {
-    await adminApi.update('students', studentId, {
-      is_subscribed: !current,
-      subscribed_at: !current ? new Date().toISOString() : null,
-    })
-    showToast(!current ? `${name} — akses diaktifkan` : `${name} — akses dilumpuhkan`, !current ? 'success' : '')
-    loadAll()
+    const patch = { is_subscribed: !current, subscribed_at: !current ? new Date().toISOString() : null }
+    patchStudentLocal(studentId, patch)
+    try {
+      await adminApi.update('students', studentId, patch)
+      showToast(!current ? `${name} — akses diaktifkan` : `${name} — akses dilumpuhkan`, !current ? 'success' : '')
+    } catch {
+      patchStudentLocal(studentId, { is_subscribed: current })
+      showToast('Gagal menyimpan. Cuba lagi.', 'error')
+    }
   }
 
   const addStudentWithSub = async () => {
@@ -242,29 +250,50 @@ export default function AdminPage() {
   }
 
   const togglePremium = async (studentId: string, current: boolean, name: string) => {
-    await adminApi.update('students', studentId, {
-      is_premium: !current,
-      is_subscribed: !current ? true : false,
-      subscribed_at: !current ? new Date().toISOString() : null,
-    })
-    showToast(!current ? `💎 ${name} — Premium diaktifkan!` : `${name} — Premium dilumpuhkan`, !current ? 'success' : '')
-    loadAll()
+    const before = students.find(st => st.id === studentId)
+    const patch = { is_premium: !current, is_subscribed: !current, subscribed_at: !current ? new Date().toISOString() : null }
+    patchStudentLocal(studentId, patch)
+    try {
+      await adminApi.update('students', studentId, patch)
+      showToast(!current ? `💎 ${name} — Premium diaktifkan!` : `${name} — Premium dilumpuhkan`, !current ? 'success' : '')
+    } catch {
+      if (before) patchStudentLocal(studentId, { is_premium: before.is_premium, is_subscribed: before.is_subscribed, subscribed_at: before.subscribed_at })
+      showToast('Gagal menyimpan. Cuba lagi.', 'error')
+    }
   }
 
   const approvePayment = async (reqId: string, studentId: string, name: string) => {
-    // Activate premium for student
-    await adminApi.update('students', studentId, { is_premium: true, is_subscribed: true, subscribed_at: new Date().toISOString() })
-    // Update request status
-    await adminApi.update('payment_requests', reqId, { status: 'approved', updated_at: new Date().toISOString() })
-    showToast(`✅ ${name} — Premium diaktifkan!`, 'success')
-    loadAll()
+    const req = paymentRequests.find((r: any) => r.id === reqId)
+    const now = new Date().toISOString()
+    // Terus keluarkan dari senarai menunggu & tandakan premium di skrin
+    setPaymentRequests(prev => prev.filter((r: any) => r.id !== reqId))
+    setAllPaymentRequests(prev => [{ ...(req || {}), id: reqId, status: 'approved' }, ...prev.filter((r: any) => r.id !== reqId)])
+    patchStudentLocal(studentId, { is_premium: true, is_subscribed: true, subscribed_at: now })
+    try {
+      // Dua kemas kini dijalankan serentak
+      await Promise.all([
+        adminApi.update('students', studentId, { is_premium: true, is_subscribed: true, subscribed_at: now }),
+        adminApi.update('payment_requests', reqId, { status: 'approved', updated_at: now }),
+      ])
+      showToast(`✅ ${name} — Premium diaktifkan!`, 'success')
+    } catch {
+      showToast('Gagal meluluskan. Memuat semula data...', 'error')
+      loadAll()
+    }
   }
 
   const rejectPayment = async (reqId: string, name: string) => {
     if (!confirm(`Tolak permintaan dari ${name}?`)) return
-    await adminApi.update('payment_requests', reqId, { status: 'rejected', updated_at: new Date().toISOString() })
-    showToast(`❌ Permintaan ${name} ditolak`, '')
-    loadAll()
+    const req = paymentRequests.find((r: any) => r.id === reqId)
+    setPaymentRequests(prev => prev.filter((r: any) => r.id !== reqId))
+    setAllPaymentRequests(prev => [{ ...(req || {}), id: reqId, status: 'rejected' }, ...prev.filter((r: any) => r.id !== reqId)])
+    try {
+      await adminApi.update('payment_requests', reqId, { status: 'rejected', updated_at: new Date().toISOString() })
+      showToast(`❌ Permintaan ${name} ditolak`, '')
+    } catch {
+      showToast('Gagal menolak. Memuat semula data...', 'error')
+      loadAll()
+    }
   }
 
   const startPresenceWatch = () => {
@@ -324,26 +353,47 @@ export default function AdminPage() {
     setAffLoading(false)
   }
 
+  const patchAffiliateLocal = (id: string, patch: Record<string, unknown>) =>
+    setAffiliates(prev => prev.map(x => x.id === id ? { ...x, ...patch } : x))
+
   const setAffiliateStatus = async (a: any, status: 'active' | 'suspended') => {
-    await adminApi.update('affiliates', a.id, { status })
-    showToast(status === 'active' ? `${a.full_name} diaktifkan` : `${a.full_name} digantung`, status === 'active' ? 'success' : '')
-    loadAffiliates()
+    const prevStatus = a.status
+    patchAffiliateLocal(a.id, { status })
+    try {
+      await adminApi.update('affiliates', a.id, { status })
+      showToast(status === 'active' ? `${a.full_name} diaktifkan` : `${a.full_name} digantung`, status === 'active' ? 'success' : '')
+    } catch {
+      patchAffiliateLocal(a.id, { status: prevStatus })
+      showToast('Gagal menyimpan. Cuba lagi.', 'error')
+    }
   }
 
   const saveAffiliateRate = async (a: any) => {
     const rate = Number(affRateEdit[a.id])
     if (!(rate >= 0 && rate <= 100)) return showToast('Kadar mesti 0–100', 'error')
-    await adminApi.update('affiliates', a.id, { commission_rate: rate })
+    const prevRate = a.commission_rate
+    patchAffiliateLocal(a.id, { commission_rate: rate })
     setAffRateEdit(r => { const n = { ...r }; delete n[a.id]; return n })
-    showToast(`Kadar ${a.full_name} → ${rate}%`, 'success')
-    loadAffiliates()
+    try {
+      await adminApi.update('affiliates', a.id, { commission_rate: rate })
+      showToast(`Kadar ${a.full_name} → ${rate}%`, 'success')
+    } catch {
+      patchAffiliateLocal(a.id, { commission_rate: prevRate })
+      showToast('Gagal menyimpan. Cuba lagi.', 'error')
+    }
   }
 
   const markAffiliatePaid = async (a: any) => {
     if (!confirm(`Tandakan komisen RM${Number(a.pending).toFixed(2)} untuk ${a.full_name} sebagai DIBAYAR?\n\nPastikan anda sudah membuat pemindahan ke akaun bank mereka.`)) return
-    const { data } = await adminApi.affiliateMarkPaid(a.id)
-    showToast(`${data?.count || 0} komisen ditandakan dibayar`, 'success')
-    loadAffiliates()
+    const prev = { pending: a.pending, paid: a.paid }
+    patchAffiliateLocal(a.id, { pending: 0, paid: Number(a.paid) + Number(a.pending) })
+    try {
+      const { data } = await adminApi.affiliateMarkPaid(a.id)
+      showToast(`${data?.count || 0} komisen ditandakan dibayar`, 'success')
+    } catch {
+      patchAffiliateLocal(a.id, prev)
+      showToast('Gagal menyimpan. Cuba lagi.', 'error')
+    }
   }
 
   useEffect(() => {
@@ -400,13 +450,19 @@ export default function AdminPage() {
     const lnk = links.find((l: any) => l.id === linkId) as any
     if (!lnk) return
     setLName(lnk.name); setLUrl(lnk.url || ''); setLImgData(lnk.img_url || '')
-    setLContentType(lnk.content_type || 'url'); setLHtmlContent(lnk.html_content || ''); setLTags(lnk.tags || []); setLAccessType(lnk.access_type || 'free')
+    setLContentType(lnk.content_type || 'url'); setLHtmlContent(''); setLTags(lnk.tags || []); setLAccessType(lnk.access_type || 'free')
     setLinkModal({ open: true, folderIdx: null, linkIdx: linkId })
+    if (lnk.content_type === 'html') {
+      setLHtmlContent('⏳ Memuatkan kod...')
+      adminApi.select('links', { columns: 'html_content', eq: { id: linkId } })
+        .then(r => setLHtmlContent(r.data?.[0]?.html_content || ''))
+    }
   }
   const saveLink = async () => {
     if (!lName.trim()) return showToast('Masukkan nama aktiviti', 'error')
     if (lContentType === 'url' && !lUrl.trim()) return showToast('Masukkan URL', 'error')
     if (lContentType === 'html' && !lHtmlContent.trim()) return showToast('Paste kod HTML', 'error')
+    if (lHtmlContent === '⏳ Memuatkan kod...') return showToast('Tunggu kod selesai dimuatkan', 'error')
     let url = lUrl.trim()
     if (lContentType === 'url' && url && !/^https?:\/\//i.test(url)) url = 'https://' + url
     let imgUrl: string | null = null

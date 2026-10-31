@@ -4,7 +4,7 @@ import { supabase } from '@/lib/supabase'
 import { adminApi, uploadImageAdmin } from '@/lib/adminApi'
 import type { Folder, Link, Banner, Student } from '@/lib/supabase'
 
-type Tab = 'overview' | 'apps' | 'banners' | 'students' | 'requests' | 'payment' | 'usage' | 'report' | 'affiliate'
+type Tab = 'overview' | 'apps' | 'banners' | 'students' | 'requests' | 'payment' | 'affiliate'
 
 // Lucide-style SVG icons (inline, no dependency)
 const Icons = {
@@ -42,12 +42,6 @@ export default function AdminPage() {
   const [savingPaySettings, setSavingPaySettings] = useState(false)
   const [payQrData, setPayQrData] = useState('')
 
-  // Usage tracking state
-  const [usageStudentFilter, setUsageStudentFilter] = useState('')
-  const [usageSelectedStudent, setUsageSelectedStudent] = useState<any>(null)
-  const [studentUsage, setStudentUsage] = useState<any[]>([])
-  const [appReport, setAppReport] = useState<any[]>([])
-  const [usageLoading, setUsageLoading] = useState(false)
 
   // Affiliate
   const [affiliates, setAffiliates] = useState<any[]>([])
@@ -74,6 +68,7 @@ export default function AdminPage() {
   const [showEditPw, setShowEditPw] = useState(false)
   const [toast, setToast] = useState<{ msg: string; type?: string } | null>(null)
   const [subSearch, setSubSearch] = useState('')
+  const [studentFilter, setStudentFilter] = useState<'all' | 'premium' | 'free'>('all')
 
   // Forms
   const [lName, setLName] = useState(''); const [lUrl, setLUrl] = useState(''); const [lImgData, setLImgData] = useState(''); const [lContentType, setLContentType] = useState<'url'|'html'>('url'); const [lHtmlContent, setLHtmlContent] = useState(''); const [lTags, setLTags] = useState<string[]>([]); const [lAccessType, setLAccessType] = useState<'free'|'premium'>('free')
@@ -129,29 +124,6 @@ export default function AdminPage() {
   }
 
 
-
-  const loadUsageForStudent = async (s: any) => {
-    setUsageLoading(true)
-    setUsageSelectedStudent(s)
-    const { data } = await adminApi.select('app_usage', { eq: { student_id: s.id }, order: 'opened_at', limit: 200 })
-    setStudentUsage(data || [])
-    setUsageLoading(false)
-  }
-
-  const loadAppReport = async () => {
-    setUsageLoading(true)
-    const { data } = await adminApi.select('app_usage', { columns: 'link_id, link_name', limit: 5000 })
-    if (data) {
-      const counts: Record<string, { link_id: string; link_name: string; count: number }> = {}
-      data.forEach((row: any) => {
-        const key = row.link_id || row.link_name
-        if (!counts[key]) counts[key] = { link_id: row.link_id, link_name: row.link_name, count: 0 }
-        counts[key].count++
-      })
-      setAppReport(Object.values(counts).sort((a, b) => b.count - a.count))
-    }
-    setUsageLoading(false)
-  }
 
   const savePaySettings = async () => {
     setSavingPaySettings(true)
@@ -339,7 +311,6 @@ export default function AdminPage() {
   }, [])
 
   useEffect(() => {
-    if (tab === 'report' && appReport.length === 0) loadAppReport()
     if (tab === 'affiliate') loadAffiliates()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab])
@@ -517,6 +488,16 @@ export default function AdminPage() {
   }
 
   const subscribedCount = students.filter(s => s.is_subscribed).length
+  const searchQ = subSearch.trim().toLowerCase()
+  const searchDigits = searchQ.replace(/[^0-9]/g, '')
+  const shownStudents = students.filter(s => {
+    if (studentFilter === 'premium' && !s.is_premium) return false
+    if (studentFilter === 'free' && s.is_premium) return false
+    if (!searchQ) return true
+    return (s.full_name || '').toLowerCase().includes(searchQ)
+      || (s.student_id || '').toLowerCase().includes(searchQ)
+      || (searchDigits.length >= 3 && (s.parent_phone || '').replace(/[^0-9]/g, '').includes(searchDigits))
+  })
 
   const Toggle = ({ on, onToggle, disabled }: { on: boolean; onToggle: () => void; disabled?: boolean }) => (
     <button onClick={onToggle} disabled={disabled} style={{
@@ -540,8 +521,6 @@ export default function AdminPage() {
 
     { key: 'requests', label: 'Permintaan', icon: Icons.subscription },
     { key: 'payment', label: 'Bayaran', icon: Icons.payment },
-    { key: 'usage', label: 'Penggunaan', icon: Icons.activity },
-    { key: 'report', label: 'Laporan Apps', icon: Icons.barchart },
     { key: 'affiliate', label: 'Affiliate', icon: Icons.affiliate },
   ]
 
@@ -847,9 +826,44 @@ export default function AdminPage() {
         {/* STUDENTS */}
         {tab === 'students' && (
           <Section title={`Senarai Murid (${students.length})`}>
+            {/* Carian & penapis */}
+            <div style={{ position: 'sticky', top: 0, zIndex: 5, background: 'white', paddingBottom: 10, marginBottom: 4 }}>
+              <div style={{ position: 'relative' }}>
+                <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', fontSize: 14, color: '#94A3B8' }}>🔍</span>
+                <input
+                  value={subSearch}
+                  onChange={e => setSubSearch(e.target.value)}
+                  placeholder="Cari nama, ID murid atau no. telefon..."
+                  style={{ width: '100%', padding: '11px 36px 11px 36px', border: '1.5px solid #E2E8F0', borderRadius: 12, fontSize: 14, outline: 'none', boxSizing: 'border-box' as const, background: '#F8FAFC' }}
+                />
+                {subSearch && (
+                  <button onClick={() => setSubSearch('')} aria-label="Kosongkan carian"
+                    style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', width: 24, height: 24, borderRadius: '50%', border: 'none', background: '#E2E8F0', color: '#64748B', cursor: 'pointer', fontSize: 12 }}>✕</button>
+                )}
+              </div>
+              <div style={{ display: 'flex', gap: 6, marginTop: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                {([
+                  { k: 'all', l: `Semua (${students.length})` },
+                  { k: 'premium', l: `💎 Premium (${students.filter(x => x.is_premium).length})` },
+                  { k: 'free', l: `Biasa (${students.filter(x => !x.is_premium).length})` },
+                ] as const).map(f => (
+                  <button key={f.k} onClick={() => setStudentFilter(f.k)} style={{
+                    padding: '6px 12px', borderRadius: 20, fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                    border: `1.5px solid ${studentFilter === f.k ? '#4F46E5' : '#E2E8F0'}`,
+                    background: studentFilter === f.k ? '#EEF2FF' : 'white',
+                    color: studentFilter === f.k ? '#4F46E5' : '#64748B',
+                  }}>{f.l}</button>
+                ))}
+                {(subSearch || studentFilter !== 'all') && (
+                  <span style={{ marginLeft: 'auto', fontSize: 11, color: '#94A3B8' }}>{shownStudents.length} dijumpai</span>
+                )}
+              </div>
+            </div>
             {students.length === 0
               ? <Empty msg="Tiada murid berdaftar" />
-              : students.map((s: any, i: number) => {
+              : shownStudents.length === 0
+              ? <Empty msg="Tiada murid sepadan dengan carian." />
+              : shownStudents.map((s: any, i: number) => {
                 const lastLogin = s.last_login ? new Date(s.last_login) : null
                 const now = new Date()
                 const diffDays = lastLogin ? Math.floor((now.getTime() - lastLogin.getTime()) / (1000*60*60*24)) : null
@@ -1092,122 +1106,6 @@ export default function AdminPage() {
                 {paySettings.whatsapp && <div>💬 WhatsApp: <strong>{paySettings.whatsapp}</strong></div>}
               </div>
             </div>
-          </Section>
-        )}
-
-        {/* ── TAB PENGGUNAAN: history per murid ── */}
-        {tab === 'usage' && (
-          <Section title="📱 Penggunaan Apps Per Murid">
-            <p style={{ fontSize: 12, color: '#64748B', marginBottom: 14 }}>Pilih murid untuk lihat apps yang pernah dibuka.</p>
-            <input
-              placeholder="🔍 Cari nama atau ID murid..."
-              value={usageStudentFilter}
-              onChange={e => setUsageStudentFilter(e.target.value)}
-              style={{ width: '100%', padding: '10px 14px', border: '1.5px solid #E2E8F0', borderRadius: 10, fontSize: 13, outline: 'none', marginBottom: 14, boxSizing: 'border-box' as const }}
-            />
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(190px,1fr))', gap: 8, marginBottom: 20 }}>
-              {students
-                .filter(s => s.full_name.toLowerCase().includes(usageStudentFilter.toLowerCase()) || (s.student_id||'').toLowerCase().includes(usageStudentFilter.toLowerCase()))
-                .map((s: any) => (
-                  <button key={s.id} onClick={() => loadUsageForStudent(s)}
-                    style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 14px', border:`2px solid ${usageSelectedStudent?.id===s.id?'#4F46E5':'#E2E8F0'}`, borderRadius:10, background:usageSelectedStudent?.id===s.id?'#EEF2FF':'white', cursor:'pointer', textAlign:'left' as const }}>
-                    <span style={{ width:34, height:34, borderRadius:'50%', background:'linear-gradient(135deg,#4F46E5,#6366F1)', display:'flex', alignItems:'center', justifyContent:'center', color:'white', fontWeight:700, fontSize:14, flexShrink:0 }}>{s.full_name[0]}</span>
-                    <div style={{ minWidth:0 }}>
-                      <div style={{ fontSize:12, fontWeight:700, color:'#1E293B', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{s.full_name}</div>
-                      <div style={{ fontSize:11, color:'#94A3B8' }}>@{s.student_id||'—'}</div>
-                    </div>
-                  </button>
-                ))}
-            </div>
-
-            {usageSelectedStudent && (
-              <div style={{ borderTop:'2px solid #F1F5F9', paddingTop:20 }}>
-                <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:16 }}>
-                  <span style={{ width:42, height:42, borderRadius:'50%', background:'linear-gradient(135deg,#4F46E5,#6366F1)', display:'flex', alignItems:'center', justifyContent:'center', color:'white', fontWeight:800, fontSize:17 }}>{usageSelectedStudent.full_name[0]}</span>
-                  <div>
-                    <div style={{ fontSize:15, fontWeight:800, color:'#1E293B' }}>{usageSelectedStudent.full_name}</div>
-                    <div style={{ fontSize:12, color:'#64748B' }}>@{usageSelectedStudent.student_id} · {studentUsage.length} rekod</div>
-                  </div>
-                </div>
-
-                {usageLoading ? (
-                  <div style={{ textAlign:'center', padding:40, color:'#94A3B8' }}>⏳ Memuatkan...</div>
-                ) : studentUsage.length === 0 ? (
-                  <div style={{ textAlign:'center', padding:40, background:'#F8FAFC', borderRadius:12 }}>
-                    <div style={{ fontSize:32, marginBottom:8 }}>📊</div>
-                    <div style={{ fontWeight:600, color:'#475569' }}>Tiada rekod</div>
-                    <div style={{ fontSize:12, color:'#94A3B8', marginTop:4 }}>Murid ini belum buka mana-mana apps</div>
-                  </div>
-                ) : (
-                  <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
-                    {studentUsage.map((u: any, i: number) => {
-                      const d = new Date(u.opened_at)
-                      return (
-                        <div key={u.id||i} style={{ display:'flex', alignItems:'center', gap:12, padding:'10px 14px', background:i%2===0?'#F8FAFC':'white', borderRadius:10, border:'1px solid #F1F5F9' }}>
-                          <span style={{ fontSize:20, flexShrink:0 }}>🎮</span>
-                          <div style={{ flex:1 }}>
-                            <div style={{ fontSize:13, fontWeight:700, color:'#1E293B' }}>{u.link_name}</div>
-                            <div style={{ fontSize:11, color:'#94A3B8', marginTop:2 }}>
-                              {d.toLocaleDateString('ms-MY',{day:'2-digit',month:'short',year:'numeric'})} · {d.toLocaleTimeString('ms-MY',{hour:'2-digit',minute:'2-digit'})}
-                            </div>
-                          </div>
-                          <span style={{ fontSize:10, background:'#EEF2FF', color:'#4F46E5', padding:'2px 8px', borderRadius:20, fontWeight:700 }}>#{i+1}</span>
-                        </div>
-                      )
-                    })}
-                  </div>
-                )}
-              </div>
-            )}
-          </Section>
-        )}
-
-        {/* ── TAB LAPORAN APPS: ranking kerap guna ── */}
-        {tab === 'report' && (
-          <Section title="📈 Laporan Penggunaan Apps" action={
-            <button onClick={loadAppReport} style={{ display:'flex', alignItems:'center', gap:6, padding:'8px 16px', background:'linear-gradient(135deg,#4F46E5,#6366F1)', color:'white', border:'none', borderRadius:10, fontSize:12, fontWeight:700, cursor:'pointer' }}>
-              🔄 Muat Semula
-            </button>
-          }>
-            {usageLoading ? (
-              <div style={{ textAlign:'center', padding:50, color:'#94A3B8' }}>⏳ Menganalisis data...</div>
-            ) : appReport.length === 0 ? (
-              <div style={{ textAlign:'center', padding:50 }}>
-                <div style={{ fontSize:42, marginBottom:12 }}>📊</div>
-                <div style={{ fontWeight:700, color:'#475569', marginBottom:8 }}>Belum ada data</div>
-                <div style={{ fontSize:12, color:'#94A3B8', marginBottom:16 }}>Data akan muncul sebaik murid mula membuka apps</div>
-                <button onClick={loadAppReport} style={{ padding:'10px 24px', background:'linear-gradient(135deg,#4F46E5,#6366F1)', color:'white', border:'none', borderRadius:10, fontSize:13, fontWeight:700, cursor:'pointer' }}>Jana Laporan</button>
-              </div>
-            ) : (
-              <div>
-                <div style={{ display:'flex', gap:8, marginBottom:16, padding:'10px 14px', background:'#F0F9FF', borderRadius:10, border:'1px solid #BAE6FD' }}>
-                  <span>📊</span>
-                  <span style={{ fontSize:12, color:'#0369A1', fontWeight:600 }}>
-                    {appReport.reduce((s,a)=>s+a.count,0)} jumlah buka · {appReport.length} apps berbeza
-                  </span>
-                </div>
-                <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
-                  {appReport.map((app: any, i: number) => {
-                    const maxCount = appReport[0]?.count||1
-                    const pct = Math.round((app.count/maxCount)*100)
-                    const medal = i===0?'🥇':i===1?'🥈':i===2?'🥉':`${i+1}.`
-                    const color = i===0?'#4F46E5':i===1?'#7C3AED':i===2?'#EC4899':'#94A3B8'
-                    return (
-                      <div key={app.link_id||i} style={{ padding:'12px 16px', background:i<3?'#FAFAFE':'white', border:`1.5px solid ${i<3?'#E0E7FF':'#F1F5F9'}`, borderRadius:12 }}>
-                        <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:8 }}>
-                          <span style={{ fontSize:i<3?20:13, fontWeight:700, minWidth:28, textAlign:'center' as const }}>{medal}</span>
-                          <span style={{ flex:1, fontSize:13, fontWeight:700, color:'#1E293B' }}>{app.link_name}</span>
-                          <span style={{ fontSize:14, fontWeight:900, color }}>{app.count}x</span>
-                        </div>
-                        <div style={{ background:'#F1F5F9', borderRadius:20, height:7, overflow:'hidden' }}>
-                          <div style={{ width:`${pct}%`, height:'100%', background:color, borderRadius:20 }} />
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
-            )}
           </Section>
         )}
 

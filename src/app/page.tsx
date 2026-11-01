@@ -192,16 +192,17 @@ export default function StudentHome() {
       <style>{`
         @keyframes fadeUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
         @keyframes loadbar{0%{width:0%;opacity:1}80%{width:90%;opacity:1}100%{width:100%;opacity:0}}
-        .app-card{transition:transform .18s,box-shadow .18s!important;animation:fadeUp .35s ease both}
+        .app-card{min-width:0;display:flex;transition:transform .18s,box-shadow .18s!important;animation:fadeUp .35s ease both}
+        .app-card>div{flex:1;display:flex;flex-direction:column}
         .app-card:active{transform:scale(.93)!important}
         @media(hover:hover){.app-card:hover{transform:translateY(-4px) scale(1.02)!important}}
         .filter-btn{transition:all .2s;border:none;cursor:pointer;font-family:'Plus Jakarta Sans',sans-serif}
         .filter-btn:active{transform:scale(.94)}
         .filter-scroll::-webkit-scrollbar{display:none}
-        .apps-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
-        @media(min-width:480px){.apps-grid{grid-template-columns:repeat(3,1fr)}}
-        @media(min-width:768px){.apps-grid{grid-template-columns:repeat(4,1fr);gap:18px}}
-        @media(min-width:1100px){.apps-grid{grid-template-columns:repeat(5,1fr);gap:20px}}
+        .apps-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+        @media(min-width:480px){.apps-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+        @media(min-width:768px){.apps-grid{grid-template-columns:repeat(4,minmax(0,1fr));gap:18px}}
+        @media(min-width:1100px){.apps-grid{grid-template-columns:repeat(5,minmax(0,1fr));gap:20px}}
       `}</style>
 
       {/* HEADER */}
@@ -377,7 +378,7 @@ export default function StudentHome() {
 
                       {/* Name + year tags */}
                       <div style={{ padding: '8px 9px 10px' }}>
-                        <div style={{ fontFamily: "'Plus Jakarta Sans',sans-serif", fontWeight: 800, fontSize: 12, color: '#1E293B', textAlign: 'center', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: yearTags.length > 0 ? 5 : 0 }}>
+                        <div style={{ fontFamily: "'Plus Jakarta Sans',sans-serif", fontWeight: 800, fontSize: 12, lineHeight: '16px', color: '#1E293B', textAlign: 'center', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', minHeight: 32, wordBreak: 'break-word', marginBottom: yearTags.length > 0 ? 5 : 0 }}>
                           {l.name}
                         </div>
                         {yearTags.length > 0 && (

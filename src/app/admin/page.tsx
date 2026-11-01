@@ -1257,20 +1257,45 @@ export default function AdminPage() {
             </FG>
           )}
 
-          <FG label="Tag / Tahun">
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
-              {['Tahun 1','Tahun 2','Tahun 3','Tahun 4','Tahun 5','Tahun 6','Matematik','Sains','Bahasa'].map(tag => {
-                const active = lTags.includes(tag)
-                return (
-                  <button key={tag} type="button" onClick={() => setLTags(prev => active ? prev.filter(t => t !== tag) : [...prev, tag])}
-                    style={{ padding: '6px 14px', borderRadius: 20, border: `2px solid ${active ? '#4F46E5' : '#E2E8F0'}`, background: active ? '#4F46E5' : 'white', color: active ? 'white' : '#64748B', fontSize: 12, fontWeight: 700, cursor: 'pointer', transition: 'all 0.15s' }}>
-                    {tag}
-                  </button>
-                )
-              })}
-            </div>
-            <p style={{ fontSize: 11, color: '#94A3B8' }}>Pilih satu atau lebih tag. Murid boleh filter mengikut tag ini.</p>
-          </FG>
+          {(() => {
+            const YEARS = ['Tahun 1','Tahun 2','Tahun 3','Tahun 4','Tahun 5','Tahun 6']
+            const SUBJECTS = ['Matematik','Sains','Bahasa Melayu','Bahasa Inggeris']
+            const currentSubject = lTags.find(t => !YEARS.includes(t)) || ''
+            // Subjek lama (cth "Bahasa") dikekalkan sebagai pilihan supaya tidak hilang senyap
+            const options = currentSubject && !SUBJECTS.includes(currentSubject) ? [...SUBJECTS, currentSubject] : SUBJECTS
+            const setSubject = (subj: string) =>
+              setLTags(prev => [...prev.filter(t => YEARS.includes(t)), ...(subj ? [subj] : [])])
+            return (
+              <>
+                <FG label="Subjek">
+                  <select value={currentSubject} onChange={e => setSubject(e.target.value)}
+                    style={{ ...inpStyle, cursor: 'pointer', appearance: 'auto', color: currentSubject ? '#0F172A' : '#94A3B8' }}>
+                    <option value="">— Pilih subjek —</option>
+                    {options.map(sb => (
+                      <option key={sb} value={sb}>{SUBJECTS.includes(sb) ? sb : `${sb} (lama)`}</option>
+                    ))}
+                  </select>
+                  {currentSubject && !SUBJECTS.includes(currentSubject) && (
+                    <p style={{ fontSize: 11, color: '#D97706', marginTop: 5 }}>Subjek lama. Pilih subjek baru dari senarai untuk mengemas kini.</p>
+                  )}
+                </FG>
+                <FG label="Tahun">
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+                    {YEARS.map(tag => {
+                      const active = lTags.includes(tag)
+                      return (
+                        <button key={tag} type="button" onClick={() => setLTags(prev => active ? prev.filter(t => t !== tag) : [...prev, tag])}
+                          style={{ padding: '6px 14px', borderRadius: 20, border: `2px solid ${active ? '#4F46E5' : '#E2E8F0'}`, background: active ? '#4F46E5' : 'white', color: active ? 'white' : '#64748B', fontSize: 12, fontWeight: 700, cursor: 'pointer', transition: 'all 0.15s' }}>
+                          {tag}
+                        </button>
+                      )
+                    })}
+                  </div>
+                  <p style={{ fontSize: 11, color: '#94A3B8' }}>Pilih satu atau lebih tahun. Murid boleh tapis mengikut subjek dan tahun.</p>
+                </FG>
+              </>
+            )
+          })()}
           <FG label="Akses">
             <div style={{ display: 'flex', gap: 8 }}>
               <button type="button" onClick={() => setLAccessType('free')} style={{ flex: 1, padding: '10px', borderRadius: 10, border: `2px solid ${lAccessType==='free'?'#10B981':'#E2E8F0'}`, background: lAccessType==='free'?'#ECFDF5':'white', color: lAccessType==='free'?'#059669':'#64748B', fontWeight: 700, fontSize: 13, cursor: 'pointer', transition: 'all 0.15s', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>

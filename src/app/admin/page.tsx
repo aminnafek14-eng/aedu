@@ -68,6 +68,12 @@ export default function AdminPage() {
   const [showEditPw, setShowEditPw] = useState(false)
   const [toast, setToast] = useState<{ msg: string; type?: string } | null>(null)
   const [subSearch, setSubSearch] = useState('')
+  // Penapis tab Aktiviti
+  const [appSearch, setAppSearch] = useState('')
+  const [appSubject, setAppSubject] = useState('Semua')
+  const [appYear, setAppYear] = useState('Semua')
+  const [appAccess, setAppAccess] = useState<'all' | 'free' | 'premium'>('all')
+  const [appSort, setAppSort] = useState<'order' | 'name' | 'newest'>('order')
   const [studentFilter, setStudentFilter] = useState<'all' | 'premium' | 'free'>('all')
 
   // Forms
@@ -488,6 +494,28 @@ export default function AdminPage() {
   }
 
   const subscribedCount = students.filter(s => s.is_subscribed).length
+
+  // ── Penapis & susunan aktiviti (admin) ──
+  const YEAR_LIST = ['Tahun 1','Tahun 2','Tahun 3','Tahun 4','Tahun 5','Tahun 6']
+  const SUBJECT_LIST = ['Matematik','Sains','Bahasa Melayu','Bahasa Inggeris']
+  const subjectOf = (l: any) => ((l.tags || []) as string[]).find(t => !YEAR_LIST.includes(t)) || ''
+  const extraSubjects = Array.from(new Set((links as any[]).map(subjectOf).filter(sb => sb && !SUBJECT_LIST.includes(sb)))).sort()
+  const appQ = appSearch.trim().toLowerCase()
+  const shownLinks = (links as any[])
+    .filter(l => {
+      const tags: string[] = l.tags || []
+      if (appAccess !== 'all' && (l.access_type || 'free') !== appAccess) return false
+      if (appSubject === '__none' ? subjectOf(l) !== '' : appSubject !== 'Semua' && subjectOf(l) !== appSubject) return false
+      if (appYear === '__none' ? tags.some(t => YEAR_LIST.includes(t)) : appYear !== 'Semua' && !tags.includes(appYear)) return false
+      if (appQ && !(l.name || '').toLowerCase().includes(appQ)) return false
+      return true
+    })
+    .sort((a, b) =>
+      appSort === 'name' ? (a.name || '').localeCompare(b.name || '', 'ms') :
+      appSort === 'newest' ? String(b.created_at || '').localeCompare(String(a.created_at || '')) :
+      (a.order_num ?? 0) - (b.order_num ?? 0))
+  const appFiltersOn = !!appQ || appSubject !== 'Semua' || appYear !== 'Semua' || appAccess !== 'all'
+  const resetAppFilters = () => { setAppSearch(''); setAppSubject('Semua'); setAppYear('Semua'); setAppAccess('all') }
   const searchQ = subSearch.trim().toLowerCase()
   const searchDigits = searchQ.replace(/[^0-9]/g, '')
   const shownStudents = students.filter(s => {
@@ -756,10 +784,61 @@ export default function AdminPage() {
         {/* APPS / AKTIVITI */}
         {tab === 'apps' && (
           <Section title={`Semua Aktiviti (${links.length})`} action={<BtnAdd onClick={openAddLink}>{Icons.plus} Tambah Aktiviti</BtnAdd>}>
+            {/* Bar penapis */}
+            <div style={{ position: 'sticky', top: 0, zIndex: 5, background: 'white', paddingBottom: 10, marginBottom: 4 }}>
+              <div style={{ position: 'relative', marginBottom: 8 }}>
+                <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', fontSize: 14, color: '#94A3B8' }}>🔍</span>
+                <input value={appSearch} onChange={e => setAppSearch(e.target.value)} placeholder="Cari nama aktiviti..."
+                  style={{ width: '100%', padding: '10px 36px', border: '1.5px solid #E2E8F0', borderRadius: 12, fontSize: 14, outline: 'none', boxSizing: 'border-box' as const, background: '#F8FAFC' }} />
+                {appSearch && (
+                  <button onClick={() => setAppSearch('')} aria-label="Kosongkan carian"
+                    style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', width: 24, height: 24, borderRadius: '50%', border: 'none', background: '#E2E8F0', color: '#64748B', cursor: 'pointer', fontSize: 12 }}>✕</button>
+                )}
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(140px,1fr))', gap: 8 }}>
+                <select value={appSubject} onChange={e => setAppSubject(e.target.value)} style={filterSel(appSubject !== 'Semua')}>
+                  <option value="Semua">📖 Semua subjek</option>
+                  {SUBJECT_LIST.map(sb => <option key={sb} value={sb}>{sb} ({(links as any[]).filter(l => subjectOf(l) === sb).length})</option>)}
+                  {extraSubjects.map(sb => <option key={sb} value={sb}>{sb} — lama ({(links as any[]).filter(l => subjectOf(l) === sb).length})</option>)}
+                  <option value="__none">Tiada subjek ({(links as any[]).filter(l => !subjectOf(l)).length})</option>
+                </select>
+                <select value={appYear} onChange={e => setAppYear(e.target.value)} style={filterSel(appYear !== 'Semua')}>
+                  <option value="Semua">🎓 Semua tahun</option>
+                  {YEAR_LIST.map(y => <option key={y} value={y}>{y} ({(links as any[]).filter(l => (l.tags || []).includes(y)).length})</option>)}
+                  <option value="__none">Tiada tahun</option>
+                </select>
+                <select value={appSort} onChange={e => setAppSort(e.target.value as 'order' | 'name' | 'newest')} style={filterSel(false)}>
+                  <option value="order">↕ Susunan asal</option>
+                  <option value="name">↕ Nama A–Z</option>
+                  <option value="newest">↕ Terbaru dahulu</option>
+                </select>
+              </div>
+              <div style={{ display: 'flex', gap: 6, marginTop: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                {([
+                  { k: 'all', l: `Semua (${links.length})`, c: '#4F46E5', bg: '#EEF2FF' },
+                  { k: 'free', l: `✓ Free (${(links as any[]).filter(l => (l.access_type || 'free') === 'free').length})`, c: '#059669', bg: '#ECFDF5' },
+                  { k: 'premium', l: `💎 Premium (${(links as any[]).filter(l => l.access_type === 'premium').length})`, c: '#D97706', bg: '#FFFBEB' },
+                ] as const).map(f => (
+                  <button key={f.k} onClick={() => setAppAccess(f.k)} style={{
+                    padding: '6px 12px', borderRadius: 20, fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                    border: `1.5px solid ${appAccess === f.k ? f.c : '#E2E8F0'}`,
+                    background: appAccess === f.k ? f.bg : 'white', color: appAccess === f.k ? f.c : '#64748B',
+                  }}>{f.l}</button>
+                ))}
+                {appFiltersOn && (
+                  <>
+                    <span style={{ marginLeft: 'auto', fontSize: 11, color: '#94A3B8' }}>{shownLinks.length} dijumpai</span>
+                    <button onClick={resetAppFilters} style={{ fontSize: 11, fontWeight: 700, color: '#4F46E5', background: 'none', border: 'none', cursor: 'pointer' }}>Set semula</button>
+                  </>
+                )}
+              </div>
+            </div>
             {links.length === 0
               ? <Empty msg="Tiada aktiviti lagi. Tambah aktiviti pertama!" />
+              : shownLinks.length === 0
+              ? <Empty msg="Tiada aktiviti sepadan dengan penapis." />
               : <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {(links as any[]).map((l: any) => {
+                  {shownLinks.map((l: any) => {
                     const tags: string[] = l.tags || []
                     return (
                       <div key={l.id} style={{
@@ -1399,6 +1478,10 @@ export default function AdminPage() {
 }
 
 // ── Reusable sub-components ──
+const filterSel = (active: boolean): React.CSSProperties => ({
+  width: '100%', padding: '9px 10px', borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: 'pointer', outline: 'none',
+  border: `1.5px solid ${active ? '#4F46E5' : '#E2E8F0'}`, background: active ? '#EEF2FF' : 'white', color: active ? '#4F46E5' : '#475569',
+})
 const inpStyle: React.CSSProperties = { width: '100%', padding: '10px 13px', border: '1.5px solid #E2E8F0', borderRadius: 10, fontSize: 14, outline: 'none', fontFamily: "'Inter',sans-serif", background: '#F8FAFC' }
 
 function Section({ title, action, children }: { title: string; action?: React.ReactNode; children: React.ReactNode }) {
